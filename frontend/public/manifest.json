@@ -1,6 +1,7 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "HyacinthWatch",
+  "name": "HyacinthWatch - Water Hyacinth Monitoring System",
+  "description": "Citizen science system for monitoring invasive water hyacinth",
   "icons": [
     {
       "src": "favicon.ico",
@@ -20,6 +21,11 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "orientation": "portrait",
+  "theme_color": "#2c5530",
+  "background_color": "#f5f5f5",
+  "categories": ["environment", "science", "education"],
+  "lang": "en",
+  "scope": "/",
+  "prefer_related_applications": false
 }

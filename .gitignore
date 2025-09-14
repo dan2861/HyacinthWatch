@@ -23,6 +23,12 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
 # Django
 *.log
 local_settings.py
@@ -48,6 +54,7 @@ yarn-error.log*
 .react-cache/
 out/
 build/
+dist/
 
 # IDE
 .vscode/
