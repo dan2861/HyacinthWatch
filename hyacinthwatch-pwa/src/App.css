@@ -1,38 +1,80 @@
-.App {
-  text-align: center;
+:root {
+  --brand: #0ea5e9;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+.app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 16px;
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
+.hdr {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
+  justify-content: space-between;
+}
+
+.btn {
+  background: var(--brand);
   color: white;
+  border: 0;
+  border-radius: 12px;
+  padding: .6rem 1rem;
+  cursor: pointer;
 }
 
-.App-link {
-  color: #61dafb;
+.card {
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 12px;
+  margin: 12px 0;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.thumb {
+  width: 84px;
+  height: 84px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.meta {
+  color: #475569;
+  font-size: .9rem;
+}
+
+.status {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+input[type="file"] {
+  width: 100%;
+}
+
+.offline {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: #fff;
+  background: #16a34a;
+}
+
+.offline[data-offline="true"] {
+  background: #b91c1c;
 }
