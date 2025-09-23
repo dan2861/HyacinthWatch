@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import * as exifr from 'exifr'
-import { putObservation, getObservation, deleteObservation, listObservations } from './db'
+import { putObservation, getObservation, deleteObservation, listObservations, setStatus } from './db'
+import { postObservation } from './api';
 import { uuid, nowIso } from './util';
 import logo from './logo.svg';
 import './App.css';
@@ -68,6 +69,18 @@ function App() {
     await refresh()
   }
 
+  async function uploadOne(item) {
+    try {
+      await setStatus(item.id, 'uploading')
+      const result = await postObservation(item)
+      // Optionally store server id back into the record
+      await setStatus(item.id, 'sent')
+    } catch (err) {
+      await setStatus(item.id, 'queued', String(err.message || err))
+    }
+    await refresh()
+  }
+
   return (
     <div className="App">
       <div className='hdr'>
@@ -86,12 +99,24 @@ function App() {
         {!items.length && <p>No observation yet.</p>}
         {items.map((it) => (
           <div className='row' key={it.id}>
-            <img className='thumb' alt='preview' src={URL.createObjectURL(it.blob)} />
+            <img
+              className='thumb'
+              alt='preview'
+              src={URL.createObjectURL(it.blob)}
+              onError={(e) => {
+                console.error('Image failed to load:', e);
+                e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjZjBmMGYwIi8+Cjx0ZXh0IHg9IjIwIiB5PSIyMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjEyIiBmaWxsPSIjOTk5Ij5JTUc8L3RleHQ+Cjwvc3ZnPgo=';
+              }} />
             <div style={{ flex: 1 }}>
               <div className="status">{String(it.status).toUpperCase()}</div>
+              {it.error && <div className="meta" style={{ color: '#b91c1c' }}>Error: {it.error}</div>}
               <div className="meta">{new Date(it.capturedAt).toLocaleString()}</div>
               <div className="meta">{it.lat?.toFixed?.(5)}, {it.lon?.toFixed?.(5)}</div>
             </div>
+            {(it.status === 'queued' || it.status === 'error') && (
+              <button className="btn" onClick={() => uploadOne(it)}>Upload</button>
+            )}
+            {it.status === 'uploading' && <div>Uploading…</div>}
             <button className='btn' onClick={() => remove(it.id)}>Delete</button>
           </div>
         ))}
