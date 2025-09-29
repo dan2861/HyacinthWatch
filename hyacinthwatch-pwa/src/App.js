@@ -13,11 +13,13 @@ function App() {
 
   // load queue
   async function refresh() {
-    const data = await listObservations()
-    setItems(data)
+    const data = await listObservations() // Get all observations from IndexedDB
+    setItems(data) // Update UI with loaded data
   }
 
+  // Load saved observations on startup
   useEffect(() => { refresh() }, [])
+
   useEffect(() => {
     const on = () => setOnline(true)
     const off = () => setOnline(false)
@@ -29,14 +31,27 @@ function App() {
     }
   }, [])
 
+  // Auto upload when back online
+  useEffect(() => {
+    const tryAuto = async () => {
+      if (!navigator.onLine) return
+      const data = await listObservations()
+      for (const it of data) {
+        if (it.status !== 'sent') await uploadOne(it)
+      }
+    }
+    window.addEventListener('online', tryAuto)
+    return () => window.removeEventListener('online', tryAuto)
+  }, [])
+
   async function handleSelect(e) {
-    const file = e.target.files?.[0]
+    const file = e.target.files?.[0] // Get selected image
     if (!file) return
-    setBusy(true)
+    setBusy(true) // Show "Processing..."
 
     let lat = null, lon = null, capturedAt = nowIso()
     try {
-      // Try EXIF GPS and DateTimeOriginal
+      // Extract GPS coordinates from EXIF data
       const gps = await exifr.gps(file)
       if (gps && typeof gps.latitude === 'number' && typeof gps.longitude == 'number') {
         lat = gps.latitude
@@ -49,19 +64,18 @@ function App() {
     } catch { }
 
     const obs = {
-      id: uuid(),
-      blob: file,
-      mime: file.type || 'image/jpeg',
-      capturedAt,
-      lat, lon,
-      status: 'queued'
+      id: uuid(),                       // Generate unique ID
+      blob: file,                       // Store image data
+      mime: file.type || 'image/jpeg',  // Store image format
+      capturedAt,                       // Timestamp
+      lat, lon,                         // GPS coordinates
+      status: 'queued'                  // Initial status
     }
 
-    await putObservation(obs)
-    await refresh()
-    setBusy(false)
-    // reset input
-    e.target.value = ''
+    await putObservation(obs)   // Save to IndexedDb
+    await refresh()             // Update UI
+    setBusy(false)              // Hide "Processing..."
+    e.target.value = ''         // reset input
   }
 
   async function remove(id) {
@@ -72,13 +86,16 @@ function App() {
   async function uploadOne(item) {
     try {
       await setStatus(item.id, 'uploading')
-      const result = await postObservation(item)
-      // Optionally store server id back into the record
-      await setStatus(item.id, 'sent')
+      await refresh() // Instantly update UI to show "UPLOADING"
+
+      const result = await postObservation(item)  // Send to server
+      await setStatus(item.id, 'sent')            // store server id back into the record
+      await refresh()
+
     } catch (err) {
       await setStatus(item.id, 'queued', String(err.message || err))
+      await refresh()
     }
-    await refresh()
   }
 
   return (

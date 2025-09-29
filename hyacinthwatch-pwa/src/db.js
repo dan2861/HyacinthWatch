@@ -20,7 +20,7 @@ export async function listObservations() {
     const k = await keys(store)
     const items = await Promise.all(k.map((key) => get(key, store)))
     // newest first
-    return items.sort((a, b) => new Date(b.captruedAt) - new Date(a.capturedAt))
+    return items.sort((a, b) => new Date(b.capturedAt) - new Date(a.capturedAt))
 }
 
 export async function setStatus(id, status, error) {
