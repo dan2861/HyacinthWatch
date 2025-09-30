@@ -5,6 +5,8 @@ research/data/
 research/outputs/
 models/**/checkpoints/
 .env
+.env.local
+.env.docker
 media/
 node_modules/
 db.sqlite3
