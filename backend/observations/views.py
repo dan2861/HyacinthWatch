@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import Observation
 from .serializer import ObservationSerializer
+from .qc import compute_qc
 
 # Create your views here.
 ISO_FORMATS = [
@@ -65,6 +66,18 @@ class ObservationListCreate(APIView):
             notes=meta.get('notes'),
             status='received',
         )
+
+        # compute qc that now image is saved
+        try:
+            qc = compute_qc(obs.image.path)
+            obs.qc = qc
+            obs.qc_score = qc.get("score")
+            obs.status = 'done'
+            obs.save(update_fields=['qc', 'qc_score', 'status', 'updated_at'])
+        except Exception as e:
+            # Don't fail the request instead mark error if QC crashes
+            obs.status = 'error'
+            obs.save(update_fields=['status', 'updated_at'])
 
         serializer = ObservationSerializer(obs, context={'request': request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)

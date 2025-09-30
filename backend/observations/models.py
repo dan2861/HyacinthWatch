@@ -29,5 +29,10 @@ class Observation(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # {"blur_var": float, "brightness": float}
+    qc = models.JSONField(null=True, blank=True)
+    qc_score = models.FloatField(
+        null=True, blank=True)     # optional roll-up 0..1
+
     def __str__(self):
         return f"{self.id} @ ({self.lat}, {self.lon})"

@@ -29,3 +29,9 @@ export async function setStatus(id, status, error) {
     const next = { ...current, status, error }
     await set(id, next, store)
 }
+
+export async function patchObservation(id, patch) {
+    const cur = await get(id, store)
+    if (!cur) return;
+    await set(id, { ...cur, ...patch }, store);
+}
