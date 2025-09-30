@@ -1,11 +1,33 @@
 from django.db import models
+import uuid
 
 
 class Observation(models.Model):
-    created_at = models.DateTimeField(auto_now_add=True)
-    photo = models.ImageField(upload_to="observations/")
-    lat = models.FloatField(null=True, blank=True)
-    lon = models.FloatField(null=True, blank=True)
+    STATUS_CHOICES = [
+        ('received', 'received'),
+        ('processing', 'processing'),
+        ('done', 'done'),
+        ('error', 'error'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    image = models.ImageField(upload_to='observations/%Y/%m/%d/')
+
+    captured_at = models.DateTimeField()
+    lat = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True)
+    lon = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True)
     location_accuracy_m = models.FloatField(null=True, blank=True)
-    # received|processed|rejected
-    status = models.CharField(max_length=32, default="received")
+
+    device_info = models.TextField(null=True, blank=True)
+    notes = models.TextField(null=True, blank=True)
+
+    status = models.CharField(
+        max_length=16, choices=STATUS_CHOICES, default='received')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.id} @ ({self.lat}, {self.lon})"
