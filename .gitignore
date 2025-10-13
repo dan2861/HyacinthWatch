@@ -24,3 +24,4 @@ checkpoints/
 research/data_drive/
 .ipynb_checkpoints/
 .DS_Store
+.github/
