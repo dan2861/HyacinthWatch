@@ -12,11 +12,21 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 import os
+import dj_database_url
 from dotenv import load_dotenv
+from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 
 # Load environment variables
-load_dotenv()
+BASE_DIR = Path(__file__).resolve().parent.parent
+ENV_PATH = BASE_DIR / ".env"
+DOCKER_ENV_PATH = BASE_DIR / ".env.docker"
 
+# always load local .env
+load_dotenv(ENV_PATH)
+
+# optionally load docker env to override (guarded)
+if os.environ.get("DJANGO_IN_DOCKER") == "1" or os.path.exists(DOCKER_ENV_PATH):
+    load_dotenv(DOCKER_ENV_PATH, override=True)
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -49,6 +59,7 @@ INSTALLED_APPS = [
     # third-party
     'rest_framework',
     'corsheaders',
+    'storages',
     # local
     'observations',
 ]
@@ -96,20 +107,50 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'hyacinthwatch.wsgi.application'
 
-
-# Database
-# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'hyacinthwatch'),
-        'USER': os.environ.get('DB_USER', 'postgres'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', 'devpassword123'),
-        'HOST': os.environ.get('DB_HOST', 'localhost'),
-        'PORT': os.environ.get('DB_PORT', '5432'),
+# prefer a full DATABASE_URL when present (handles URL-encoded passwords)
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if DATABASE_URL:
+    # dj-database-url returns a Django DATABASE dict
+    # sanitize the URL: remove unsupported query params (e.g. pgbouncer)
+    parsed = urlparse(DATABASE_URL)
+    qs = dict(parse_qsl(parsed.query))
+    qs.pop('pgbouncer', None)
+    sanitized_query = urlencode(qs)
+    sanitized = urlunparse(parsed._replace(query=sanitized_query))
+    DATABASES = {'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600, ssl_require=(
+        os.environ.get('PGSSLMODE', '').lower() == 'require'))}
+    DATABASES = {'default': dj_database_url.parse(sanitized, conn_max_age=600, ssl_require=(
+        os.environ.get('PGSSLMODE', '').lower() == 'require'))}
+    # ensure a short connect timeout so the process fails fast when network/DNS is flaky
+    try:
+        DATABASES['default'].setdefault('OPTIONS', {})
+        DATABASES['default']['OPTIONS'].setdefault('connect_timeout', int(os.environ.get('DB_CONNECT_TIMEOUT', 5)))
+    except Exception:
+        pass
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ.get('DB_NAME', 'postgres'),
+            'USER': os.environ.get('DB_USER', 'postgres'),
+            'PASSWORD': os.environ.get('DB_PASSWORD'),
+            'HOST': os.environ.get('DB_HOST'),
+            'PORT': os.environ.get('DB_PORT', '6543'),
+            'OPTIONS': {
+                'sslmode': os.environ.get('PGSSLMODE', 'require'),
+                # Fail fast when remote DB is unreachable (seconds)
+                'connect_timeout': int(os.environ.get('DB_CONNECT_TIMEOUT', 5)),
+            },
+        },
     }
-}
+
+# Small dev-friendly log so you can see which DB path was selected when starting
+try:
+    _db_info = DATABASES.get('default', {})
+    print(
+        f"[settings] Using DB engine={_db_info.get('ENGINE')} host={_db_info.get('HOST')} port={_db_info.get('PORT')}")
+except Exception:
+    pass
 
 
 # Password validation
@@ -154,3 +195,20 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# --- Supabase / S3-compatible storage settings ---
+# Use django-storages with an S3-compatible endpoint (Supabase Storage).
+DEFAULT_FILE_STORAGE = os.environ.get(
+    'DEFAULT_FILE_STORAGE', 'django.core.files.storage.FileSystemStorage')
+
+if os.environ.get('USE_S3', '0') == '1':
+    # switch on S3 backend when USE_S3=1
+    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+    AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
+    AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
+    AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME')
+    AWS_S3_REGION_NAME = os.environ.get('AWS_S3_REGION_NAME', None)
+    AWS_S3_ENDPOINT_URL = os.environ.get(
+        'AWS_S3_ENDPOINT_URL') or os.environ.get('SUPABASE_URL')
+    AWS_S3_ADDRESSING_STYLE = os.environ.get('AWS_S3_ADDRESSING_STYLE', 'path')
+    AWS_DEFAULT_ACL = os.environ.get('AWS_DEFAULT_ACL', None)

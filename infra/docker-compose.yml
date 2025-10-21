@@ -1,43 +1,21 @@
 services:
-  # PostgreSQL Database
-  db:
-    image: postgres:13
-    container_name: hyacinth-db
-    environment:
-      POSTGRES_DB: hyacinthwatch
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: devpassword123
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # Django Backend
   backend:
-    build: 
+    build:
       context: ../backend
       dockerfile: Dockerfile
     container_name: hyacinth-backend
     ports:
       - "8000:8000"
     env_file:
-      - ../backend/.env.docker
+      - ../backend/.env.docker # Supabase envs
     volumes:
       - ../backend:/app
-      - media_files:/app/media
-      - media_files:/Users/danu/Desktop/CPSC\ 4900/Code\ Base/HyacinthWatch/backend/media_docker  # Access point
-    depends_on:
-      db:
-        condition: service_healthy
+      # keep media if you actually write user files locally; else remove
+      #- media_files:/app/media
     command: >
       sh -c "python manage.py migrate &&
-             python manage.py runserver 0.0.0.0:8000"
+             gunicorn backend.wsgi:application -w 3 -b 0.0.0.0:8000"
+    restart: unless-stopped
 
 volumes:
-  postgres_data:
   media_files:

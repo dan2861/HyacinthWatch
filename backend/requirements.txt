@@ -4,3 +4,6 @@ django-cors-headers
 psycopg2-binary
 python-dotenv
 Pillow
+boto3
+supabase
+django-storages==1.14.6
