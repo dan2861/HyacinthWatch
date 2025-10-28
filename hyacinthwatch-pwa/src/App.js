@@ -16,6 +16,7 @@ import { uuid, nowIso } from './util'
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import { FitButton, LocateMeButton } from './components/MapHelpers'
 import { blurLabel, brightLabel, Badge } from './components/qcLabels'
+import GameProfile from './components/GameProfile'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import './App.css'
@@ -154,7 +155,7 @@ function App() {
       .then((u) => {
         if (mounted) setSbUser(u)
       })
-      .catch(() => {})
+      .catch(() => { })
 
     const unsubscribe = onAuthChange((user) => {
       if (mounted) setSbUser(user)
@@ -311,9 +312,12 @@ function App() {
               </>
             )}
             {sbUser && (
-              <button className="btn" onClick={handleSignOut}>
-                Log Out
-              </button>
+              <>
+                <GameProfile sbUser={sbUser} />
+                <button className="btn" onClick={handleSignOut}>
+                  Log Out
+                </button>
+              </>
             )}
           </nav>
         </header>

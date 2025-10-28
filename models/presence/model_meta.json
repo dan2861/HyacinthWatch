@@ -1,0 +1,33 @@
+{
+    "task": "presence",
+    "name": "presence_mobilenetv2",
+    "version": "1.0.0",
+    "format": "state_dict",
+    "weights_filename": "presence_mobilenetv2.pt",
+    "architecture": "mobilenet_v2",
+    "num_classes": 1,
+    "input_size": [
+        224,
+        224
+    ],
+    "normalize": {
+        "mean": [
+            0.485,
+            0.456,
+            0.406
+        ],
+        "std": [
+            0.229,
+            0.224,
+            0.225
+        ]
+    },
+    "activation": "sigmoid",
+    "threshold": 0.50,
+    "metrics": {
+        "youden_j": 0.3520047962665558,
+        "f1": 0.9
+    },
+    "sha256": "12d87fdb512e9c816c6b1a3647b8e1621d53b6e3dbd5cf5b0348b58b0c44029f",
+    "exported_at": "2025-10-26T02:22:48Z"
+}

@@ -1,0 +1,7 @@
+# Machine learning/runtime dependencies for model-based presence & segmentation
+# These packages are large. Install only into the worker image.
+# Consider pinning to platform-specific CPU wheels for faster/smaller installs.
+torch
+torchvision
+segmentation-models-pytorch
+timm

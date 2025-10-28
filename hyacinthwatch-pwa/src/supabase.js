@@ -40,13 +40,38 @@ export async function getSession() {
   }
 }
 
-// Retained for existing callers; simply returns the current session.
-export async function ensureSupabaseSession() {
-  return getSession()
+// Retained for existing callers; return the session and attempt a refresh if needed.
+export async function ensureSupabaseSession(options = {}) {
+  if (!supabase) return null
+  const { refresh = true } = options
+  let session = await getSession()
+  if (session || !refresh) return session
+  if (supabase?.auth?.refreshSession) {
+    try {
+      const { data, error } = await supabase.auth.refreshSession()
+      if (error) throw error
+      session = data?.session || null
+    } catch (err) {
+      console.warn('supabase.refreshSession failed', err)
+    }
+  }
+  return session || null
+}
+
+// Return a usable access token string (if any) from the current session.
+// Return a usable access token string (if any) from the current session.
+export async function getAccessToken(options) {
+  const session = await ensureSupabaseSession(options)
+  return (
+    session?.access_token ||
+    session?.accessToken ||
+    session?.provider_token ||
+    null
+  )
 }
 
 export function onAuthChange(cb) {
-  if (!supabase) return () => {}
+  if (!supabase) return () => { }
   const { data } = supabase.auth.onAuthStateChange((_event, session) => {
     try {
       cb?.(session?.user || null)
@@ -81,3 +106,16 @@ export async function signOut() {
 }
 
 export default supabase
+
+// DEV helper: expose the Supabase client on window for interactive debugging
+// when running the app locally. This is intentionally guarded so it won't run
+// in production builds.
+if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
+  try {
+    // expose under a non-obvious name to reduce accidental reliance
+    // but still useful for debugging in the browser console.
+    window.__hw_supabase = supabase
+  } catch (e) {
+    // ignore in environments where window isn't available
+  }
+}

@@ -14,8 +14,36 @@ services:
       #- media_files:/app/media
     command: >
       sh -c "python manage.py migrate &&
-             gunicorn backend.wsgi:application -w 3 -b 0.0.0.0:8000"
+             gunicorn hyacinthwatch.wsgi:application -w 3 -b 0.0.0.0:8000"
     restart: unless-stopped
+
+  worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.worker
+    container_name: hyacinth-worker
+    env_file:
+      - ../backend/.env.docker
+    volumes:
+      - ../backend:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "python wait_for_redis.py && python manage.py migrate && celery -A hyacinthwatch.celery worker --loglevel=info"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: hyacinth-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
 
 volumes:
   media_files:

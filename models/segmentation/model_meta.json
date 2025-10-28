@@ -1,0 +1,34 @@
+{
+    "task": "segmentation",
+    "name": "unet_aquavplant",
+    "version": "1.0.0",
+    "format": "state_dict",
+    "weights_filename": "unet_aquavplant.pt",
+    "architecture": "unet_resnet34",
+    "num_classes": 1,
+    "input_size": [
+        512,
+        512
+    ],
+    "normalize": {
+        "mean": [
+            0.485,
+            0.456,
+            0.406
+        ],
+        "std": [
+            0.229,
+            0.224,
+            0.225
+        ]
+    },
+    "activation": "sigmoid",
+    "logit_threshold": 0.50,
+    "postprocess": {
+        "min_area_px": 0,
+        "morph": null
+    },
+    "metrics": {},
+    "sha256": "b5ca769f330e8055ae02531b7eac9953d180c0d21c8726817f01a2ff6744082b",
+    "exported_at": "2025-10-26T02:18:44Z"
+}

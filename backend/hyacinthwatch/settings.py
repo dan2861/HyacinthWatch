@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
 import os
 import dj_database_url
@@ -79,7 +80,19 @@ MIDDLEWARE = [
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
+    # Allow local network dev host (add your machine IP when developing from another device)
+    'http://10.74.82.53:3000',
 ]
+
+# Allow cookies/credentials to be sent from the frontend when using
+# credentialed requests (fetch credentials: 'include'). This ensures the
+# Access-Control-Allow-Credentials header is set to 'true' in responses.
+CORS_ALLOW_CREDENTIALS = True
+
+# For quick local development you can also enable wildcard origins by setting
+# the env var `CORS_ALLOW_ALL` to '1'. This is intentionally opt-in.
+if os.environ.get('CORS_ALLOW_ALL') in ('1', 'true', 'True'):
+    CORS_ALLOW_ALL_ORIGINS = True
 
 # Dev‑only: open API
 REST_FRAMEWORK = {
@@ -124,7 +137,8 @@ if DATABASE_URL:
     # ensure a short connect timeout so the process fails fast when network/DNS is flaky
     try:
         DATABASES['default'].setdefault('OPTIONS', {})
-        DATABASES['default']['OPTIONS'].setdefault('connect_timeout', int(os.environ.get('DB_CONNECT_TIMEOUT', 5)))
+        DATABASES['default']['OPTIONS'].setdefault(
+            'connect_timeout', int(os.environ.get('DB_CONNECT_TIMEOUT', 5)))
     except Exception:
         pass
 else:
@@ -212,3 +226,35 @@ if os.environ.get('USE_S3', '0') == '1':
         'AWS_S3_ENDPOINT_URL') or os.environ.get('SUPABASE_URL')
     AWS_S3_ADDRESSING_STYLE = os.environ.get('AWS_S3_ADDRESSING_STYLE', 'path')
     AWS_DEFAULT_ACL = os.environ.get('AWS_DEFAULT_ACL', None)
+
+
+# Celery connection resilience settings
+# These are picked up by Celery when using ``app.config_from_object('django.conf:settings', namespace='CELERY')``
+# and help workers tolerate transient broker restarts during local development.
+CELERY_BROKER_CONNECTION_RETRY = True
+# None => unlimited retries
+CELERY_BROKER_CONNECTION_MAX_RETRIES = None
+# Transport options passed to the Redis transport; visibility_timeout is useful
+# for long-running tasks so Redis doesn't requeue too early.
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    'visibility_timeout': int(os.environ.get('CELERY_VISIBILITY_TIMEOUT', 3600))
+}
+
+# Orphaned-observation monitor configuration
+# If an observation has no `pred.presence` after ORPHAN_PRESENCE_DELAY_MINUTES
+# minutes, the periodic monitor will re-enqueue presence classification up
+# to ORPHAN_PRESENCE_MAX_RETRIES times before giving up.
+ORPHAN_PRESENCE_DELAY_MINUTES = int(
+    os.environ.get('ORPHAN_PRESENCE_DELAY_MINUTES', '10'))
+ORPHAN_PRESENCE_MAX_RETRIES = int(
+    os.environ.get('ORPHAN_PRESENCE_MAX_RETRIES', '3'))
+
+
+# Periodic Celery beat schedule: runs the orphan monitor every 5 minutes by default.
+CELERY_BEAT_SCHEDULE = {
+    'monitor-orphaned-observations': {
+        'task': 'observations.monitor.retry_orphaned_presence',
+        'schedule': timedelta(minutes=int(os.environ.get('ORPHAN_MONITOR_SCHEDULE_MINUTES', '5'))),
+        'args': (),
+    },
+}

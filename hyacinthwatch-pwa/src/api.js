@@ -1,4 +1,4 @@
-import supabase, { getUser, ensureSupabaseSession } from './supabase'
+import supabase, { getUser, ensureSupabaseSession, getAccessToken } from './supabase'
 
 export async function postObservation(obs, token) {
     const base = process.env.REACT_APP_API_URL
@@ -58,7 +58,7 @@ export async function notifyObservationRef(payload) {
 
     if (!res.ok) {
         const txt = await res.text().catch(() => '')
-        throw new Error(`notifyObservationRef failed ${res.status}: ${txt.slice(0,200)}`)
+        throw new Error(`notifyObservationRef failed ${res.status}: ${txt.slice(0, 200)}`)
     }
 
     return res.json()
@@ -96,7 +96,41 @@ export async function getObservationSignedUrl(obsId) {
     const res = await fetch(`${base}/v1/observations/${obsId}/signed_url`)
     if (!res.ok) {
         const txt = await res.text().catch(() => '')
-        throw new Error(`signed url request failed ${res.status}: ${txt.slice(0,200)}`)
+        throw new Error(`signed url request failed ${res.status}: ${txt.slice(0, 200)}`)
     }
     return res.json() // { signed_url }
+}
+
+
+export async function getGameProfile() {
+    const base = process.env.REACT_APP_API_URL
+    if (!base) throw new Error('REACT_APP_API_URL missing')
+    // Try to obtain an access token with a short retry window — sometimes
+    // the supabase session may not be immediately available at UI render time.
+    let token = null
+    const maxAttempts = 6
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+            token = await getAccessToken({ refresh: true })
+        } catch (err) {
+            console.warn('getAccessToken attempt failed', err)
+            token = null
+        }
+        if (token) break
+        // small backoff before retrying
+        await new Promise(res => setTimeout(res, 150 * (attempt + 1)))
+    }
+    const hasBearer = typeof token === 'string' && token.trim().length > 0
+    const headers = hasBearer ? { Authorization: `Bearer ${token}` } : {}
+    // Helpful dev-only debug: do not print tokens, only whether one was found.
+    try { console.debug && console.debug('getGameProfile: hasToken=', hasBearer) } catch (e) { }
+    // If we have a bearer token, avoid sending credentials to prevent unnecessary cookie handling.
+    // Otherwise include credentials so session-cookie auth works when available.
+    const options = hasBearer ? { headers } : { headers, credentials: 'include' }
+    const res = await fetch(`${base}/v1/game/profile`, options)
+    if (!res.ok) {
+        const txt = await res.text().catch(() => '')
+        throw new Error(`getGameProfile failed ${res.status}: ${txt.slice(0, 200)}`)
+    }
+    return res.json()
 }
