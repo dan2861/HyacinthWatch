@@ -14,7 +14,7 @@ services:
       #- media_files:/app/media
     command: >
       sh -c "python manage.py migrate &&
-             gunicorn hyacinthwatch.wsgi:application -w 3 -b 0.0.0.0:8000"
+             gunicorn hyacinthwatch.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120 --graceful-timeout 30 --keep-alive 5 --log-level info"
     restart: unless-stopped
 
   worker:

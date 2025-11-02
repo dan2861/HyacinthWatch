@@ -72,7 +72,7 @@ def load_presence(version: str = '1.0.0'):
 
 
 @lru_cache(maxsize=None)
-def load_segmenter(version: str = '1.0.1'):
+def load_segmenter(version: str = '1.0.0'):
     meta = _load_meta('segmentation', version)
     w = _load_weights_bytes('segmentation', version, meta['weights_filename'])
     if torch is None:

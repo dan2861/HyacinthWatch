@@ -63,7 +63,8 @@ def load_presence(version: str = '1.0.0'):
     if last_channel is None:
         # best-effort fallback
         pass
-    model.classifier[1] = torch.nn.Linear(last_channel, meta.get('num_classes', 1))
+    model.classifier[1] = torch.nn.Linear(
+        last_channel, meta.get('num_classes', 1))
     sd = torch.load(io.BytesIO(w), map_location=DEVICE)
     model.load_state_dict(sd, strict=False)
     model.eval().to(DEVICE)
@@ -71,7 +72,7 @@ def load_presence(version: str = '1.0.0'):
 
 
 @lru_cache(maxsize=None)
-def load_segmenter(version: str = '1.0.1'):
+def load_segmenter(version: str = '1.0.0'):
     meta = _load_meta('segmentation', version)
     w = _load_weights_bytes('segmentation', version, meta['weights_filename'])
     if torch is None:
@@ -82,8 +83,16 @@ def load_segmenter(version: str = '1.0.1'):
         smp = None
     if smp is None:
         raise RuntimeError('segmentation_models_pytorch not available')
-    model = smp.Unet(encoder_name='resnet34', encoder_weights=None, classes=1, activation=None)
+    model = smp.Unet(encoder_name='resnet34',
+                     encoder_weights=None, classes=1, activation=None)
     sd = torch.load(io.BytesIO(w), map_location=DEVICE)
+    # Convert state_dict weights to float32 if they're in double precision
+    if sd:
+        for key in sd:
+            if sd[key].dtype == torch.float64:
+                sd[key] = sd[key].float()
     model.load_state_dict(sd, strict=False)
+    # Ensure model parameters use float32 for stable inference.
+    model = model.float()
     model.eval().to(DEVICE)
     return model, meta

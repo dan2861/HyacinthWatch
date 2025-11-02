@@ -89,7 +89,9 @@ def upload_bytes(bucket: str, path: str, data: bytes, content_type: str = 'appli
         except Exception:
             msg = ''
 
-        if last_exc and ('409' in msg or 'Duplicate' in msg or 'already exists' in msg):
+        # Supabase Storage can return 400 (Bad Request) or 409 (Conflict) when a file exists
+        # even with upsert=True. Try update (PUT) as a fallback.
+        if last_exc and ('400' in msg or '409' in msg or 'Bad Request' in msg or 'Duplicate' in msg or 'already exists' in msg):
             try:
                 # Try update (PUT) if supported by the client
                 bucket_obj.update(path, data, file_options=file_options)

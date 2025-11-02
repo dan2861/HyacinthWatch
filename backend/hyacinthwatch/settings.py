@@ -95,9 +95,15 @@ if os.environ.get('CORS_ALLOW_ALL') in ('1', 'true', 'True'):
     CORS_ALLOW_ALL_ORIGINS = True
 
 # Dev‑only: open API
+# Enable Supabase JWT authentication to allow authenticated requests from the frontend
+# This enables gamification by linking observations to users
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
-    'DEFAULT_AUTHENTICATION_CLASSES': [],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'observations.authentication.SupabaseJWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.BasicAuthentication',
+    ],
 }
 
 ROOT_URLCONF = 'hyacinthwatch.urls'

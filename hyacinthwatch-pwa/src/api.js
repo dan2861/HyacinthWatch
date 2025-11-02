@@ -6,6 +6,15 @@ export async function postObservation(obs, token) {
         throw new Error('REACT_APP_API_URL missing')
     }
 
+    // Get token if not provided
+    if (!token) {
+        try {
+            token = await getAccessToken({ refresh: true })
+        } catch (err) {
+            console.warn('getAccessToken failed for postObservation', err)
+        }
+    }
+
     const form = new FormData()
     const filename = `${obs.id}.${(obs.mime || 'image/jpeg').split('/').pop()}`
     form.append('image', obs.blob, filename)
@@ -50,9 +59,22 @@ export async function notifyObservationRef(payload) {
     const base = process.env.REACT_APP_API_URL
     if (!base) throw new Error('REACT_APP_API_URL missing')
 
+    // Get token for authentication
+    let token = null
+    try {
+        token = await getAccessToken({ refresh: true })
+    } catch (err) {
+        console.warn('getAccessToken failed for notifyObservationRef', err)
+    }
+
+    const headers = { 'Content-Type': 'application/json' }
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+    }
+
     const res = await fetch(`${base}/v1/observations/ref`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload),
     })
 

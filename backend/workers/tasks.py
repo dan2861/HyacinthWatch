@@ -120,7 +120,13 @@ def classify_presence(obs_id: str):
     try:
         from observations.gamification import award_for_presence
         try:
-            award_for_presence(obs, label)
+            # Reload observation with user relationship to ensure gamification has access to user
+            try:
+                obs_for_award = Observation.objects.select_related(
+                    'user').get(id=obs_id)
+            except Observation.DoesNotExist:
+                obs_for_award = obs
+            award_for_presence(obs_for_award, label)
         except Exception:
             logger.exception(
                 'classify_presence: failed to award presence points for %s', obs_id)
@@ -179,7 +185,7 @@ def segment_and_cover(obs_id: str):
     # could reschedule or skip segmentation; revert to always performing
     # segmentation so uploads get masks regardless of presence.
 
-    version = os.environ.get('SEGMENTATION_MODEL_VERSION', '1.0.1')
+    version = os.environ.get('SEGMENTATION_MODEL_VERSION', '1.0.0')
     # Try to load the segmentation model from Supabase. If the model is
     # unavailable (404) or required ML packages are missing, fall back to a
     # lightweight thresholding fallback so that the pipeline can continue and
@@ -254,7 +260,8 @@ def segment_and_cover(obs_id: str):
 
     img = Image.open(io.BytesIO(raw)).convert('RGB')
     img = img.resize(tuple(meta['input_size']))
-    x = torch.tensor(np.array(img) / 255.0).permute(2, 0, 1).unsqueeze(0)
+    x = torch.tensor(np.array(img) / 255.0,
+                     dtype=torch.float32).permute(2, 0, 1).unsqueeze(0)
     mean, std = meta['normalize']['mean'], meta['normalize']['std']
     for c in range(3):
         x[:, c] = (x[:, c] - mean[c]) / std[c]
@@ -263,6 +270,11 @@ def segment_and_cover(obs_id: str):
     try:
         if model is not None:
             device = next(model.parameters()).device
+            # Ensure model is in float32 format to match input tensor dtype
+            try:
+                model = model.float()
+            except Exception:
+                pass
         else:
             device = torch.device('cpu')
     except Exception:
@@ -348,8 +360,14 @@ def segment_and_cover(obs_id: str):
     try:
         from observations.gamification import award_for_segmentation
         try:
+            # Reload observation with user relationship to ensure gamification has access to user
+            try:
+                obs_for_award = Observation.objects.select_related(
+                    'user').get(id=obs_id)
+            except Observation.DoesNotExist:
+                obs_for_award = obs
             # award based on the seg entry we just stored
-            award_for_segmentation(obs, seg_entry)
+            award_for_segmentation(obs_for_award, seg_entry)
         except Exception:
             logger.exception(
                 'segment_and_cover: failed to award segmentation points for %s', obs_id)
