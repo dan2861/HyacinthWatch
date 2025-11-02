@@ -58,11 +58,18 @@ def score_from_qc(qc: dict) -> int:
 
 
 def score_from_seg(seg: dict) -> int:
-    """Compute points from segmentation entry (cover_pct)."""
+    """Compute points from segmentation entry (cover_pct).
+
+    Only awards points if cover_pct > 0 (actually detected hyacinth).
+    """
     if not seg:
         return 0
     try:
         cover = float(seg.get('cover_pct') or 0.0)
+        # Only award points if there's actually some cover detected (> 0%)
+        # This helps filter out false positives from the segmentation model
+        if cover <= 0.0:
+            return 0
         # give 1 point per 10% cover, up to 10 points
         pts = int(min(10, cover // 10))
         # bonus if mask comes from a non-fallback model
@@ -79,7 +86,9 @@ def award_for_presence(obs, label: str):
     user = getattr(obs, 'user', None)
     if not user:
         return 0
-    points = 5 if label == 'present' else 1
+    # Only award points for images that contain hyacinth (present)
+    # Absent images should get 0 points
+    points = 5 if label == 'present' else 0
     return award_points(user, points, reason=f'presence:{label}')
 
 

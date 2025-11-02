@@ -117,6 +117,7 @@ def classify_presence(obs_id: str):
     obs.save(update_fields=['pred', 'status', 'updated_at'])
 
     # Award gamification points for presence
+    # Only award if score is above threshold to avoid false positives
     try:
         from observations.gamification import award_for_presence
         try:
@@ -126,7 +127,15 @@ def classify_presence(obs_id: str):
                     'user').get(id=obs_id)
             except Observation.DoesNotExist:
                 obs_for_award = obs
-            award_for_presence(obs_for_award, label)
+            # Only award points if score is actually above threshold (not just label='present')
+            # This helps catch cases where label might be incorrectly set
+            if score >= thr:
+                logger.info('Awarding presence points: obs_id=%s, label=%s, score=%.3f, threshold=%.3f',
+                            obs_id, label, score, thr)
+                award_for_presence(obs_for_award, label)
+            else:
+                logger.info('Skipping presence points (below threshold): obs_id=%s, label=%s, score=%.3f, threshold=%.3f',
+                            obs_id, label, score, thr)
         except Exception:
             logger.exception(
                 'classify_presence: failed to award presence points for %s', obs_id)
@@ -335,11 +344,19 @@ def segment_and_cover(obs_id: str):
                     'segment_and_cover: upload failed for %s', obs_id)
 
     # Reload fresh record to avoid clobbering concurrent updates (e.g. presence)
+    # IMPORTANT: Check presence label BEFORE saving segmentation to ensure we have latest presence data
     try:
         fresh = Observation.objects.get(id=obs_id)
         pred = fresh.pred or {}
+        # Check presence label now, before we modify pred
+        presence_data = pred.get('presence', {})
+        presence_label = presence_data.get('label') if presence_data else None
+        presence_score = presence_data.get('score') if presence_data else None
     except Exception:
         pred = obs.pred or {}
+        presence_data = pred.get('presence', {})
+        presence_label = presence_data.get('label') if presence_data else None
+        presence_score = presence_data.get('score') if presence_data else None
 
     seg_entry = {'cover_pct': float(
         mask.mean() / 255 * 100), 'model_v': meta.get('version')}
@@ -356,7 +373,10 @@ def segment_and_cover(obs_id: str):
         obs.pred = pred
         obs.status = 'done'
         obs.save(update_fields=['pred', 'status', 'updated_at'])
+
     # Award gamification points for segmentation
+    # Only award points if the image contains hyacinth (presence is 'present')
+    # We check presence_label that we captured BEFORE saving, to ensure we have the latest data
     try:
         from observations.gamification import award_for_segmentation
         try:
@@ -366,8 +386,19 @@ def segment_and_cover(obs_id: str):
                     'user').get(id=obs_id)
             except Observation.DoesNotExist:
                 obs_for_award = obs
-            # award based on the seg entry we just stored
-            award_for_segmentation(obs_for_award, seg_entry)
+
+            # Only award segmentation points for images that contain hyacinth
+            # Require both label='present' AND score above threshold (default 0.5)
+            # to avoid false positives from the classifier
+            # Also require presence_score to not be None (presence must be classified)
+            if presence_label == 'present' and presence_score is not None and presence_score >= 0.5:
+                logger.info('Awarding segmentation points for present image: obs_id=%s, presence_label=%s, presence_score=%.3f, cover_pct=%.1f%%',
+                            obs_id, presence_label, presence_score, seg_entry.get('cover_pct'))
+                # award based on the seg entry we just stored
+                award_for_segmentation(obs_for_award, seg_entry)
+            else:
+                logger.warning('Skipping segmentation points (not hyacinth or insufficient score): obs_id=%s, presence_label=%s, presence_score=%s, cover_pct=%.1f%%',
+                               obs_id, presence_label, presence_score, seg_entry.get('cover_pct'))
         except Exception:
             logger.exception(
                 'segment_and_cover: failed to award segmentation points for %s', obs_id)
