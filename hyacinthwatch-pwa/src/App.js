@@ -102,12 +102,14 @@ function HomePage({ items, busy, online, sbUser, handleSelect, uploadOne, remove
                 Delete
               </button>
             </div>
-            {/* Show feedback after upload */}
+            {/* Show feedback after upload - show for 'sent' status and also check if backend status is 'done' */}
             {(() => {
-              if (it.status === 'sent' && sbUser) {
+              // Show feedback for uploaded observations (status 'sent' means uploaded to backend)
+              // Also check if observation might have been processed (we'll refresh status in feedback component)
+              if ((it.status === 'sent' || it.status === 'done') && sbUser) {
                 const obsId = it.backend_id || it.id
                 if (process.env.NODE_ENV === 'development') {
-                  console.log('[App] Rendering ObservationFeedback for', it.id, 'backend_id:', it.backend_id, 'using obsId:', obsId)
+                  console.log('[App] Rendering ObservationFeedback for', it.id, 'backend_id:', it.backend_id, 'status:', it.status, 'using obsId:', obsId)
                 }
                 return (
                   <div style={{ marginTop: 8, marginLeft: 60 }}>

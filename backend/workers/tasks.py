@@ -43,7 +43,14 @@ def classify_presence(obs_id: str):
 
     version = os.environ.get('PRESENCE_MODEL_VERSION', '1.0.0')
     model, meta = load_presence(version)
-    thr = float(meta.get('threshold', 0.5))
+    # Allow override of threshold via environment variable for testing/tuning
+    # Default to meta threshold (0.5) or fall back to 0.5 if not in meta
+    base_thr = float(meta.get('threshold', 0.5))
+    # If PRESENCE_THRESHOLD env var is set, use it instead of meta threshold
+    env_thr = os.environ.get('PRESENCE_THRESHOLD')
+    thr = float(env_thr) if env_thr is not None else base_thr
+    logger.info('classify_presence: Using threshold=%.3f (meta=%.3f, env=%s) for obs_id=%s',
+                thr, base_thr, env_thr or 'not set', obs_id)
 
     # obtain image bytes
     raw = None
@@ -110,9 +117,12 @@ def classify_presence(obs_id: str):
         score = torch.sigmoid(model(x)).item()
     label = 'present' if score >= thr else 'absent'
 
+    logger.info('classify_presence: obs_id=%s, score=%.4f, threshold=%.4f, label=%s',
+                obs_id, score, thr, label)
+
     obs.pred = obs.pred or {}
     obs.pred['presence'] = {'score': score,
-                            'label': label, 'model_v': meta.get('version')}
+                            'label': label, 'model_v': meta.get('version'), 'threshold_used': thr}
     obs.status = 'processing' if label == 'present' else 'done'
     obs.save(update_fields=['pred', 'status', 'updated_at'])
 

@@ -63,6 +63,23 @@ class ObservationSerializer(serializers.ModelSerializer):
 
     def get_qc_feedback(self, obj):
         """Generate QC feedback message (accepted/rejected with reason)."""
+        # Check presence label first - if absent, reject regardless of QC
+        presence = (obj.pred or {}).get('presence', {})
+        presence_label = presence.get('label')
+        presence_score = presence.get('score')
+        
+        # If presence classifier says 'absent', always reject
+        if presence_label == 'absent' and obj.status == 'done':
+            import logging
+            logger = logging.getLogger(__name__)
+            score_str = f'{(presence_score * 100):.0f}' if presence_score is not None else '0'
+            return {
+                'accepted': False,
+                'reason': 'no hyacinth detected',
+                'score': obj.qc_score or 0.0,
+                'message': f'Rejected: no hyacinth detected (confidence: {score_str}%)'
+            }
+        
         # Try to get qc_score - check both obj.qc_score and obj.qc dict
         qc_score = obj.qc_score
         if qc_score is None and obj.qc:

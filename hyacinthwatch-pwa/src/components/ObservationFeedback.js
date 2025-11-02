@@ -319,14 +319,35 @@ export default function ObservationFeedback({ obsId, sbUser, onPointsUpdate }) {
                                 <div style={{ 
                                     marginTop: 4, 
                                     fontSize: 11, 
-                                    color: '#6b7280' 
+                                    color: presence.label === 'present' ? '#10b981' : '#ef4444',
+                                    fontWeight: presence.label === 'absent' ? 600 : 400
                                 }}>
                                     {presence.label === 'present' 
                                         ? `✓ Hyacinth detected (${(presence.score * 100).toFixed(0)}% confidence)`
-                                        : `✗ No hyacinth detected`
+                                        : `✗ No hyacinth detected (${(presence.score * 100).toFixed(0)}% confidence) - Rejected`
                                     }
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {/* Show presence info even when no mask (for rejected/absent observations) */}
+                    {!maskUrl && presence && presence.label === 'absent' && (
+                        <div style={{ 
+                            marginTop: 8,
+                            padding: 8,
+                            background: '#fee2e2',
+                            borderRadius: 6,
+                            borderLeft: '3px solid #ef4444',
+                            fontSize: 12
+                        }}>
+                            <div style={{ fontWeight: 600, color: '#991b1b', marginBottom: 4 }}>
+                                ✗ Rejected: No hyacinth detected
+                            </div>
+                            <div style={{ color: '#7f1d1d', fontSize: 11 }}>
+                                Confidence: {(presence.score * 100).toFixed(0)}% • 
+                                Status: {obs.status || 'unknown'}
+                            </div>
                         </div>
                     )}
 
