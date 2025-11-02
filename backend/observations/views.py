@@ -10,6 +10,7 @@ from .models import Observation
 from .serializer import ObservationSerializer
 from .qc import compute_qc
 from .qc_summary import parse_params, bin_blur, bin_brightness, ema_series, cached_json, verify_supabase_jwt
+import jwt as _pyjwt
 from rest_framework.decorators import api_view
 from rest_framework.exceptions import ValidationError, PermissionDenied
 from django.db.models import Count, Avg, Q
@@ -356,18 +357,108 @@ def qc_summary(request):
     dev_bypass = os.environ.get(
         'QC_SUMMARY_ALLOW_DEV') in ('1', 'true', 'True')
     auth = request.META.get('HTTP_AUTHORIZATION')
+    
+    # Log auth attempt for debugging
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("QC summary auth check: dev_bypass=%s, has_auth=%s, auth_preview=%s", 
+                dev_bypass, bool(auth), auth[:50] if auth else None)
+    
     if not dev_bypass:
         if not auth or not auth.startswith('Bearer '):
+            logger.warning("QC summary: Missing or invalid Authorization header")
             return Response({'detail': 'Authorization required'}, status=status.HTTP_401_UNAUTHORIZED)
         token = auth.split(None, 1)[1]
+        
+        # Log token info for debugging (but don't log the full token for security)
+        token_preview = token[:20] + '...' + token[-10:] if len(token) > 30 else '***'
+        token_parts = token.split('.')
+        logger.info("QC summary: Token received, length=%d, parts=%d, preview=%s", 
+                   len(token), len(token_parts), token_preview)
+        
+        payload = None
         try:
             supabase_url = os.environ.get('SUPABASE_URL') or ''
-            verify_supabase_jwt(token, supabase_url)
+            if not supabase_url:
+                logger.warning("QC summary: SUPABASE_URL not configured")
+                return Response({'detail': 'Supabase URL not configured'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            payload = verify_supabase_jwt(token, supabase_url)
+            logger.info("QC summary: JWT verified successfully, sub=%s", payload.get('sub'))
         except PermissionDenied as e:
-            return Response({'detail': str(e)}, status=status.HTTP_403_FORBIDDEN)
+            # If JWKS fetch failed and we're in DEBUG mode, try a dev fallback
+            error_msg = str(e)
+            # Check for explicit marker or common JWKS error patterns
+            is_jwks_error = ('JWKS_FETCH_FAILED' in error_msg or 
+                           'jwks fetch failed' in error_msg.lower() or 
+                           'unable to verify' in error_msg.lower() or 
+                           'fetch failed' in error_msg.lower())
+            is_debug = getattr(settings, 'DEBUG', False)
+            
+            logger.info("QC summary: PermissionDenied caught: error_msg=%s, is_jwks_error=%s, is_debug=%s", 
+                       error_msg, is_jwks_error, is_debug)
+            
+            if is_jwks_error and is_debug:
+                # DEV-FALLBACK: decode token without verifying signature (INSECURE, DEBUG ONLY)
+                try:
+                    # First validate that the token looks like a JWT (should have 3 parts separated by dots)
+                    token_parts = token.split('.')
+                    if len(token_parts) != 3:
+                        logger.error(
+                            "QC summary: DEV-FALLBACK failed - token has invalid format. "
+                            "Expected JWT with 3 parts (header.payload.signature), got %d parts. "
+                            "Token length: %d, Token preview: %s", 
+                            len(token_parts), len(token), token[:100] if len(token) > 100 else token
+                        )
+                        return Response({
+                            'detail': 'Token format invalid: expected JWT format (header.payload.signature) with 3 parts. '
+                                    f'Got {len(token_parts)} parts. Please ensure you are using a valid Supabase access token. '
+                                    'Check that you are logged in and have a valid token in localStorage.'
+                        }, status=status.HTTP_401_UNAUTHORIZED)
+                    
+                    payload = _pyjwt.decode(token, options={"verify_signature": False})
+                    logger.warning(
+                        "QC summary: DEV-FALLBACK SUCCESS - decoded token without verification (DEBUG mode). sub=%s", 
+                        payload.get('sub')
+                    )
+                    # Check role if present
+                    role = None
+                    user_meta = payload.get('user_metadata') or {}
+                    if isinstance(user_meta, dict):
+                        role = user_meta.get('role')
+                    if role and role not in ('researcher', 'moderator', 'admin'):
+                        logger.warning("QC summary: Role check failed: role=%s", role)
+                        return Response({
+                            'detail': f'Insufficient role: {role}. Required: researcher, moderator, or admin'
+                        }, status=status.HTTP_403_FORBIDDEN)
+                    # Token decoded successfully in dev mode, continue execution
+                    logger.info("QC summary: Dev fallback succeeded, continuing with request")
+                except _pyjwt.exceptions.DecodeError as de:
+                    logger.exception("QC summary: DEV-FALLBACK decode failed - invalid JWT format: %s", de)
+                    return Response({
+                        'detail': 'Token decode failed: invalid JWT format. Please ensure you are using a valid Supabase access token. '
+                                f'Error: {str(de)}'
+                    }, status=status.HTTP_401_UNAUTHORIZED)
+                except Exception as de:
+                    logger.exception("QC summary: DEV-FALLBACK decode failed: %s", de)
+                    return Response({
+                        'detail': f'Dev fallback failed: {str(de)}. Original error: {error_msg}'
+                    }, status=status.HTTP_403_FORBIDDEN)
+            elif is_jwks_error:
+                logger.warning("QC summary: JWKS fetch failed but not in DEBUG mode (DEBUG=%s)", is_debug)
+                return Response({
+                    'detail': 'Unable to verify token (jwks fetch failed). Check network connectivity or set QC_SUMMARY_ALLOW_DEV=1 or enable DEBUG mode'
+                }, status=status.HTTP_403_FORBIDDEN)
+            else:
+                logger.warning("QC summary: Permission denied (not JWKS error): %s", str(e))
+                return Response({'detail': str(e)}, status=status.HTTP_403_FORBIDDEN)
         except Exception as e:
+            logger.exception("QC summary: Token verification failed: %s", str(e))
             # Return a unified unauthorized response when verification fails
             return Response({'detail': 'Token verification failed: %s' % (str(e),)}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        # If we reach here without payload, something went wrong
+        if payload is None:
+            return Response({'detail': 'Token verification failed'}, status=status.HTTP_401_UNAUTHORIZED)
 
     cache_key = f"qc:summary:v1.1:{params.start.isoformat()}:{params.end.isoformat()}:{params.tz.key}:{params.granularity_resolved}:{params.smooth}:{params.user_id or 'none'}:{params.min_confidence or 'none'}:{params.device_model or 'none'}:{params.platform or 'none'}:{params.species}"
 
@@ -377,7 +468,15 @@ def qc_summary(request):
             created_at__gte=params.start, created_at__lt=params.end)
         if params.species:
             qs = qs.filter(notes__icontains=params.species)
+            logger.info("QC summary: Filtering by species '%s' (notes__icontains). Query count before filter: %d", 
+                       params.species, Observation.objects.filter(created_at__gte=params.start, created_at__lt=params.end).count())
+        else:
+            logger.info("QC summary: No species filter. Query will include all observations in date range.")
         # future filters: user_id, min_confidence, device_model, platform
+
+        # Log the query count for debugging
+        total_before_aggregate = qs.count()
+        logger.info("QC summary: Query count after filters: %d observations", total_before_aggregate)
 
         # Treat observations with status='done' as accepted
         totals = qs.aggregate(total=Count('id'), done=Count(
@@ -386,14 +485,61 @@ def qc_summary(request):
         accepted = totals.get('done') or 0
         rejected = total - accepted
         accept_rate = (accepted / total) if total else 0.0
+        
+        logger.info("QC summary: Aggregated totals - total=%d, accepted=%d, rejected=%d", total, accepted, rejected)
 
         # window-level averages (use qc_score as roll-up)
         window_avg = qs.aggregate(avg_qc=Avg('qc_score'))
         accept_reject_ratio = (accepted / rejected) if rejected else None
 
         # histograms
-        blur_bins = bin_blur(qs.values_list('qc_score', flat=True))
-        brightness_bins = bin_brightness(qs.values_list('qc_score', flat=True))
+        # bin_blur expects blur_var values (0-50 range), bin_brightness expects brightness values (0-1 range)
+        # Get actual QC values from the qc JSONField
+        blur_values = []
+        brightness_values = []
+        for obs in qs.values('qc', 'qc_score'):
+            qc = obs.get('qc') or {}
+            if qc:
+                blur_var = qc.get('blur_var')
+                brightness_raw = qc.get('brightness')
+                if blur_var is not None:
+                    blur_values.append(blur_var)
+                if brightness_raw is not None:
+                    # Normalize brightness 0-255 to 0-1 for binning
+                    brightness_values.append(min(1.0, max(0.0, brightness_raw / 255.0)))
+            # Fallback: use qc_score if blur_var/brightness not available
+            if not blur_values and obs.get('qc_score') is not None:
+                blur_values.append(obs.get('qc_score') * 50)  # Approximate conversion
+            if not brightness_values and obs.get('qc_score') is not None:
+                brightness_values.append(obs.get('qc_score'))
+        
+        blur_bins = bin_blur(blur_values) if blur_values else []
+        brightness_bins = bin_brightness(brightness_values) if brightness_values else []
+        logger.info("QC summary: Histogram bins - blur_bins count=%d, brightness_bins count=%d", 
+                   len(blur_bins), len(brightness_bins))
+
+        # Also compute averages from QC JSONField for blur_var and brightness
+        avg_blur_var = None
+        avg_brightness = None
+        try:
+            # Aggregate from qc JSONField - need to extract values
+            blur_vars = []
+            brightness_vals = []
+            for obs in qs.values('qc'):
+                qc = obs.get('qc') or {}
+                if qc:
+                    if 'blur_var' in qc:
+                        blur_vars.append(float(qc['blur_var']))
+                    if 'brightness' in qc:
+                        brightness_vals.append(float(qc['brightness']))
+            if blur_vars:
+                avg_blur_var = sum(blur_vars) / len(blur_vars)
+            if brightness_vals:
+                avg_brightness = sum(brightness_vals) / len(brightness_vals)
+            logger.info("QC summary: QC averages - avg_blur_var=%.2f, avg_brightness=%.2f", 
+                       avg_blur_var or 0, avg_brightness or 0)
+        except Exception as e:
+            logger.warning("QC summary: Failed to compute blur/brightness averages: %s", e)
 
         # time series (daily/hourly)
         if params.granularity_resolved == 'hour':
@@ -423,7 +569,12 @@ def qc_summary(request):
             'window': {'start': params.start.isoformat(), 'end': params.end.isoformat(), 'tz': params.tz.key, 'granularity': params.granularity_resolved, 'smooth': params.smooth},
             'filters': {'min_confidence': params.min_confidence, 'user_id': params.user_id, 'device_model': params.device_model, 'platform': params.platform, 'species': params.species},
             'counts': {'total': total, 'accepted': accepted, 'rejected': rejected, 'accept_rate': round(accept_rate, 3)},
-            'averages': {'avg_qc': round((window_avg.get('avg_qc') or 0), 3), 'accept_reject_ratio': round(accept_reject_ratio, 3) if accept_reject_ratio is not None else None},
+            'averages': {
+                'avg_qc': round((window_avg.get('avg_qc') or 0), 3), 
+                'accept_reject_ratio': round(accept_reject_ratio, 3) if accept_reject_ratio is not None else None,
+                'avg_blur_var': round(avg_blur_var, 3) if avg_blur_var is not None else None,
+                'avg_brightness': round(avg_brightness, 2) if avg_brightness is not None else None,
+            },
             'histograms': {'blur': blur_bins, 'brightness': brightness_bins},
             'time_series': {'buckets': buckets},
         }

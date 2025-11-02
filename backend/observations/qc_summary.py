@@ -100,7 +100,9 @@ def parse_params(request):
     if platform and platform.lower() not in ('android', 'ios', 'web'):
         raise ValidationError('platform must be one of android, ios, web')
 
-    species = q.get('species', 'hyacinth')
+    # Don't default to 'hyacinth' - only filter if explicitly provided
+    # This allows showing all observations by default
+    species = q.get('species')
     granularity = (q.get('granularity', 'auto') or 'auto').lower()
     if granularity not in ('auto', 'day', 'hour'):
         raise ValidationError('granularity must be auto|day|hour')
@@ -180,7 +182,11 @@ def verify_supabase_jwt(token, supabase_url, allowed_roles=('researcher', 'moder
             _JWK_CACHE['jwks'] = None
     jwks = _JWK_CACHE['jwks']
     if not jwks:
-        raise PermissionDenied('Unable to verify token (jwks fetch failed)')
+        # Provide more detailed error about JWKS fetch failure
+        # Include a marker that dev fallback can detect
+        raise PermissionDenied('JWKS_FETCH_FAILED: Unable to verify token (jwks fetch failed). '
+                              'This usually means the backend cannot reach Supabase to fetch public keys. '
+                              'Check network connectivity and SUPABASE_URL configuration.')
 
     try:
         unverified = jwt.decode(token, options={"verify_signature": False})
@@ -204,11 +210,13 @@ def verify_supabase_jwt(token, supabase_url, allowed_roles=('researcher', 'moder
         raise PermissionDenied('Token verification failed: %s' % (e,))
 
     # check role claim if present
+    # Allow access if no role is specified, only enforce role if one is present
     role = None
     user_meta = payload.get('user_metadata') or {}
     if isinstance(user_meta, dict):
         role = user_meta.get('role')
+    # Only check role if it's explicitly set; if no role, allow access
     if role and role not in allowed_roles:
-        raise PermissionDenied('Insufficient role')
+        raise PermissionDenied(f'Insufficient role: {role}. Required: {", ".join(allowed_roles)}')
 
     return payload
