@@ -39,8 +39,14 @@ function HomePage({ items, busy, online, sbUser, handleSelect, uploadOne, remove
     <main>
       <div className="card">
         <h2>Capture</h2>
-        <input type="file" accept="image/*" capture="environment" onChange={handleSelect} />
-        {busy && <p>Processing...</p>}
+        <input type="file" accept="image/*" capture="environment" multiple onChange={handleSelect} />
+        {busy && (
+          <p>
+            {typeof busy === 'object' && busy.count
+              ? `Processing ${busy.count} image${busy.count > 1 ? 's' : ''}...`
+              : 'Processing...'}
+          </p>
+        )}
         <p className="meta">☑️ Photos are saved offline</p>
         {!sbUser && (
           <p className="meta" style={{ color: '#b91c1c' }}>
@@ -172,7 +178,7 @@ function HomePage({ items, busy, online, sbUser, handleSelect, uploadOne, remove
 
 function App() {
   const [items, setItems] = useState([])
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState(false) // Can be false or { count: number, remaining: number }
   const [online, setOnline] = useState(navigator.onLine)
   const [sbReady, setSbReady] = useState(false)
   const [sbUser, setSbUser] = useState(null)
@@ -278,38 +284,54 @@ function App() {
 
   const handleSelect = useCallback(
     async (e) => {
-      const file = e.target.files?.[0]
-      if (!file) return
-      setBusy(true)
+      const files = Array.from(e.target.files || [])
+      if (!files.length) return
+      
+      setBusy({ count: files.length })
+      let processed = 0
 
-      let lat = null,
-        lon = null,
-        capturedAt = nowIso()
-      try {
-        const gps = await exifr.gps(file)
-        if (gps && typeof gps.latitude === 'number' && typeof gps.longitude === 'number') {
-          lat = gps.latitude
-          lon = gps.longitude
+      // Process all files
+      for (const file of files) {
+        try {
+          let lat = null,
+            lon = null,
+            capturedAt = nowIso()
+          
+          try {
+            const gps = await exifr.gps(file)
+            if (gps && typeof gps.latitude === 'number' && typeof gps.longitude === 'number') {
+              lat = gps.latitude
+              lon = gps.longitude
+            }
+            const meta = await exifr.parse(file)
+            if (meta?.DateTimeOriginal) {
+              capturedAt = new Date(meta.DateTimeOriginal).toISOString()
+            }
+          } catch {
+            // ignore EXIF errors
+          }
+
+          const obs = {
+            id: uuid(),
+            blob: file,
+            mime: file.type || 'image/jpeg',
+            capturedAt,
+            lat,
+            lon,
+            status: 'queued',
+          }
+
+          await putObservation(obs)
+          processed++
+          
+          // Update busy count
+          setBusy({ count: files.length - processed, remaining: files.length - processed })
+        } catch (err) {
+          console.error('Error processing file:', file.name, err)
+          // Continue with next file even if one fails
         }
-        const meta = await exifr.parse(file)
-        if (meta?.DateTimeOriginal) {
-          capturedAt = new Date(meta.DateTimeOriginal).toISOString()
-        }
-      } catch {
-        // ignore EXIF errors
       }
 
-      const obs = {
-        id: uuid(),
-        blob: file,
-        mime: file.type || 'image/jpeg',
-        capturedAt,
-        lat,
-        lon,
-        status: 'queued',
-      }
-
-      await putObservation(obs)
       await refresh()
       setBusy(false)
       e.target.value = ''
