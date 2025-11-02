@@ -180,6 +180,21 @@ class ObservationListCreate(APIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+class ObservationDetail(APIView):
+    """Get a single observation by ID with full details including processing status."""
+
+    def get(self, request, obs_id):
+        try:
+            obs = Observation.objects.get(id=obs_id)
+        except Observation.DoesNotExist:
+            return Response({'detail': 'not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if user owns this observation or if it's public
+        # For now, allow any authenticated user to view (can be restricted later)
+        serializer = ObservationSerializer(obs, context={'request': request})
+        return Response(serializer.data)
+
+
 class ObservationSignedUrl(APIView):
     """Return a signed URL for an observation's uploaded image (if available).
 

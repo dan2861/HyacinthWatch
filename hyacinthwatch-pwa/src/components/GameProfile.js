@@ -1,10 +1,27 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useImperativeHandle, forwardRef, useCallback } from 'react'
 import { getGameProfile } from '../api'
 
-export default function GameProfile({ sbUser }) {
+const GameProfile = forwardRef(function GameProfile({ sbUser }, ref) {
     const [profile, setProfile] = useState(null)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState(null)
+
+    const refresh = useCallback(async () => {
+        if (!sbUser) {
+            setProfile(null)
+            return
+        }
+        setLoading(true)
+        setError(null)
+        try {
+            const p = await getGameProfile()
+            setProfile(p)
+        } catch (err) {
+            setError(err.message || String(err))
+        } finally {
+            setLoading(false)
+        }
+    }, [sbUser])
 
     useEffect(() => {
         let mounted = true
@@ -30,6 +47,11 @@ export default function GameProfile({ sbUser }) {
         }
     }, [sbUser])
 
+    // Expose refresh function via ref
+    useImperativeHandle(ref, () => ({
+        refresh: refresh
+    }), [refresh])
+
     if (!sbUser) return null
 
     return (
@@ -48,4 +70,6 @@ export default function GameProfile({ sbUser }) {
             )}
         </div>
     )
-}
+})
+
+export default GameProfile

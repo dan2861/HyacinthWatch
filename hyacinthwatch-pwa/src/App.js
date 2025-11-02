@@ -17,6 +17,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import { FitButton, LocateMeButton } from './components/MapHelpers'
 import { blurLabel, brightLabel, Badge } from './components/qcLabels'
 import GameProfile from './components/GameProfile'
+import ObservationFeedback from './components/ObservationFeedback'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import './App.css'
@@ -29,7 +30,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow,
 })
 
-function HomePage({ items, busy, online, sbUser, handleSelect, uploadOne, removeItem }) {
+function HomePage({ items, busy, online, sbUser, handleSelect, uploadOne, removeItem, gameProfileRef }) {
   const hasGeo = (it) => typeof it.lat === 'number' && typeof it.lon === 'number'
   const geoItems = items.filter(hasGeo)
   const defaultCenter = geoItems.length ? [geoItems[0].lat, geoItems[0].lon] : [0, 0]
@@ -52,48 +53,86 @@ function HomePage({ items, busy, online, sbUser, handleSelect, uploadOne, remove
         <h2>Queue</h2>
         {!items.length && <p>No observation yet.</p>}
         {items.map((it) => (
-          <div className="row" key={it.id}>
-            <img
-              className="thumb"
-              alt="preview"
-              src={URL.createObjectURL(it.blob)}
-              onError={(e) => {
-                console.error('Image failed to load:', e)
-                e.target.src =
-                  'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjZjBmMGYwIi8+Cjx0ZXh0IHg9IjIwIiB5PSIyMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjEyIiBmaWxsPSIjOTk5Ij5JTUc8L3RleHQ+Cjwvc3ZnPgo='
-              }}
-            />
-            <div style={{ flex: 1 }}>
-              <div className="status">{String(it.status).toUpperCase()}</div>
-              {it.error && (
-                <div className="meta" style={{ color: '#b91c1c' }}>
-                  Error: {it.error}
-                </div>
-              )}
-              <div className="meta">{new Date(it.capturedAt).toLocaleString()}</div>
-              <div className="meta" style={{ marginTop: 4 }}>
-                <Badge label={blurLabel(it.qc)} />
-                <Badge label={brightLabel(it.qc)} />
-                {typeof it?.qc?.score === 'number' && (
-                  <span style={{ marginLeft: 6, fontSize: 12, color: '#475569' }}>
-                    QC score: {it.qc.score.toFixed(2)}
-                  </span>
+          <React.Fragment key={it.id}>
+            <div className="row">
+              <img
+                className="thumb"
+                alt="preview"
+                src={URL.createObjectURL(it.blob)}
+                onError={(e) => {
+                  console.error('Image failed to load:', e)
+                  e.target.src =
+                    'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjZjBmMGYwIi8+Cjx0ZXh0IHg9IjIwIiB5PSIyMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjEyIiBmaWxsPSIjOTk5Ij5JTUc8L3RleHQ+Cjwvc3ZnPgo='
+                }}
+              />
+              <div style={{ flex: 1 }}>
+                <div className="status">{String(it.status).toUpperCase()}</div>
+                {it.error && (
+                  <div className="meta" style={{ color: '#b91c1c' }}>
+                    Error: {it.error}
+                  </div>
                 )}
+                <div className="meta">{new Date(it.capturedAt).toLocaleString()}</div>
+                <div className="meta" style={{ marginTop: 4 }}>
+                  <Badge label={blurLabel(it.qc)} />
+                  <Badge label={brightLabel(it.qc)} />
+                  {typeof it?.qc?.score === 'number' && (
+                    <span style={{ marginLeft: 6, fontSize: 12, color: '#475569' }}>
+                      QC score: {it.qc.score.toFixed(2)}
+                    </span>
+                  )}
+                </div>
+                <div className="meta">
+                  {it.lat?.toFixed?.(5)}, {it.lon?.toFixed?.(5)}
+                </div>
               </div>
-              <div className="meta">
-                {it.lat?.toFixed?.(5)}, {it.lon?.toFixed?.(5)}
-              </div>
-            </div>
-            {(it.status === 'queued' || it.status === 'error') && (
-              <button className="btn" onClick={() => uploadOne(it)}>
-                Upload
+              {(it.status === 'queued' || it.status === 'error') && (
+                <button className="btn" onClick={() => uploadOne(it)}>
+                  Upload
+                </button>
+              )}
+              {it.status === 'uploading' && <div>Uploading…</div>}
+              <button className="btn" onClick={() => removeItem(it.id)}>
+                Delete
               </button>
-            )}
-            {it.status === 'uploading' && <div>Uploading…</div>}
-            <button className="btn" onClick={() => removeItem(it.id)}>
-              Delete
-            </button>
-          </div>
+            </div>
+            {/* Show feedback after upload */}
+            {(() => {
+              if (it.status === 'sent' && sbUser) {
+                const obsId = it.backend_id || it.id
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('[App] Rendering ObservationFeedback for', it.id, 'backend_id:', it.backend_id, 'using obsId:', obsId)
+                }
+                return (
+                  <div style={{ marginTop: 8, marginLeft: 60 }}>
+                    <ObservationFeedback
+                      obsId={obsId}
+                      sbUser={sbUser}
+                      onPointsUpdate={(earned, total) => {
+                        // Update observation status when we get points info
+                        if (earned !== undefined) {
+                          patchObservation(it.id, { points_earned: earned, total_points: total })
+                          // Refresh game profile to show updated points
+                          if (gameProfileRef.current) {
+                            gameProfileRef.current.refresh()
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                )
+              }
+              // Debug: Show why feedback isn't showing
+              if (process.env.NODE_ENV === 'development' && it.status === 'sent' && !sbUser) {
+                return (
+                  <div style={{ marginTop: 4, marginLeft: 60, fontSize: 10, color: '#ef4444' }}>
+                    ⚠️ Debug: Feedback not showing - sbUser is {String(sbUser)} (need to be logged in)
+                  </div>
+                )
+              }
+              return null
+            })()}
+          </React.Fragment>
         ))}
       </div>
 
@@ -137,6 +176,7 @@ function App() {
   const [online, setOnline] = useState(navigator.onLine)
   const [sbReady, setSbReady] = useState(false)
   const [sbUser, setSbUser] = useState(null)
+  const gameProfileRef = React.useRef(null)
 
   const refresh = useCallback(async () => {
     const data = await listObservations()
@@ -192,10 +232,13 @@ function App() {
             lat: item.lat,
             lon: item.lon,
           })
+          // Use the ID from backend response (should match client ID if client sent it)
+          const backendObsId = resp.id || item.id
           await patchObservation(item.id, {
             status: 'sent',
             qc: resp.qc || null,
             qc_score: resp.qc_score || null,
+            backend_id: backendObsId, // Store backend ID for later use
           })
           await refresh()
           return
@@ -204,10 +247,13 @@ function App() {
         }
 
         const result = await postObservation(item)
+        // Use the ID from backend response (should match client ID if client sent it)
+        const backendObsId = result.id || item.id
         await patchObservation(item.id, {
           status: 'sent',
           qc: result.qc || null,
           qc_score: result.qc_score || null,
+          backend_id: backendObsId, // Store backend ID for later use
         })
         await refresh()
       } catch (err) {
@@ -313,7 +359,7 @@ function App() {
             )}
             {sbUser && (
               <>
-                <GameProfile sbUser={sbUser} />
+                <GameProfile ref={gameProfileRef} sbUser={sbUser} />
                 <button className="btn" onClick={handleSignOut}>
                   Log Out
                 </button>
@@ -334,6 +380,7 @@ function App() {
                 handleSelect={handleSelect}
                 uploadOne={uploadOne}
                 removeItem={removeItem}
+                gameProfileRef={gameProfileRef}
               />
             }
           />

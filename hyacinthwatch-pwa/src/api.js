@@ -123,6 +123,26 @@ export async function getObservationSignedUrl(obsId) {
     return res.json() // { signed_url }
 }
 
+export async function getObservation(obsId) {
+    const base = process.env.REACT_APP_API_URL
+    if (!base) throw new Error('REACT_APP_API_URL missing')
+    
+    // Get token if available
+    let token = null
+    try {
+        token = await getAccessToken({ refresh: true })
+    } catch (err) {
+        console.warn('getAccessToken failed for getObservation', err)
+    }
+    
+    const headers = token ? { Authorization: `Bearer ${token}` } : {}
+    const res = await fetch(`${base}/v1/observations/${obsId}`, { headers })
+    if (!res.ok) {
+        const txt = await res.text().catch(() => '')
+        throw new Error(`getObservation failed ${res.status}: ${txt.slice(0, 200)}`)
+    }
+    return res.json()
+}
 
 export async function getGameProfile() {
     const base = process.env.REACT_APP_API_URL

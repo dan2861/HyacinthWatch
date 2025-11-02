@@ -1,9 +1,11 @@
 from django.urls import path
-from .views import ObservationListCreate, ObservationSignedUrl, ObservationRefCreate
+from .views import ObservationListCreate, ObservationDetail, ObservationSignedUrl, ObservationRefCreate
 from .views import qc_summary, GameProfileView, debug_headers
 
 urlpatterns = [
     path('v1/observations', ObservationListCreate.as_view(), name='observations'),
+    path('v1/observations/<uuid:obs_id>',
+         ObservationDetail.as_view(), name='observation-detail'),
     path('v1/observations/ref', ObservationRefCreate.as_view(),
          name='observations-ref'),
     path('v1/observations/<uuid:obs_id>/signed_url',
