@@ -196,14 +196,24 @@ export function ObservationDetails({ obsId, onClose, onStatusUpdate, isAdmin = f
               </p>
             </div>
 
-            {obs.lat !== null && obs.lon !== null && (
-              <div>
-                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Location</h3>
-                <p className="text-sm text-gray-900 dark:text-white">
-                  {obs.lat.toFixed(5)}, {obs.lon.toFixed(5)}
-                </p>
-              </div>
-            )}
+            {(() => {
+              const toNum = (v) => {
+                if (v === null || v === undefined) return null;
+                const n = typeof v === 'number' ? v : parseFloat(v);
+                return Number.isFinite(n) ? n : null;
+              };
+              const lat = toNum(obs.lat);
+              const lon = toNum(obs.lon);
+              if (lat === null || lon === null) return null;
+              return (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Location</h3>
+                  <p className="text-sm text-gray-900 dark:text-white">
+                    {lat.toFixed(5)}, {lon.toFixed(5)}
+                  </p>
+                </div>
+              );
+            })()}
 
             {qcScore !== null && (
               <div>

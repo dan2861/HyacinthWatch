@@ -1,4 +1,4 @@
-import { createStore, set, get, del, keys, update } from 'idb-keyval'
+import { createStore, set, get, del, keys } from 'idb-keyval'
 
 // One DB with object store
 const store = createStore('hwdb', 'observations')

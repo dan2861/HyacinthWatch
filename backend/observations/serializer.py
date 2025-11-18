@@ -30,6 +30,16 @@ class ObservationSerializer(serializers.ModelSerializer):
             from .gamification import score_from_qc, score_from_seg
             points = 0
 
+            # If QC score exists and is below threshold, do not show any points
+            qc_score = getattr(obj, 'qc_score', None)
+            if qc_score is None and getattr(obj, 'qc', None):
+                try:
+                    qc_score = obj.qc.get('score')
+                except Exception:
+                    qc_score = None
+            if qc_score is not None and qc_score < 0.5:
+                return None
+
             # Presence points (only if score >= threshold)
             presence = (obj.pred or {}).get('presence', {})
             presence_label = presence.get('label')
@@ -63,23 +73,11 @@ class ObservationSerializer(serializers.ModelSerializer):
 
     def get_qc_feedback(self, obj):
         """Generate QC feedback message (accepted/rejected with reason)."""
-        # Check presence label first - if absent, reject regardless of QC
+        # Presence classification (no early return so we can aggregate reasons)
         presence = (obj.pred or {}).get('presence', {})
         presence_label = presence.get('label')
         presence_score = presence.get('score')
-        
-        # If presence classifier says 'absent', always reject
-        if presence_label == 'absent' and obj.status == 'done':
-            import logging
-            logger = logging.getLogger(__name__)
-            score_str = f'{(presence_score * 100):.0f}' if presence_score is not None else '0'
-            return {
-                'accepted': False,
-                'reason': 'no hyacinth detected',
-                'score': obj.qc_score or 0.0,
-                'message': f'Rejected: no hyacinth detected (confidence: {score_str}%)'
-            }
-        
+
         # Try to get qc_score - check both obj.qc_score and obj.qc dict
         qc_score = obj.qc_score
         if qc_score is None and obj.qc:
@@ -96,10 +94,15 @@ class ObservationSerializer(serializers.ModelSerializer):
                     obj.id, bool(obj.qc), obj.qc_score)
             return None
 
-        # Determine acceptance based on QC score and status
-        # Status 'done' + good QC = accepted; otherwise may be processing or rejected
+        # Determine acceptance with presence taking precedence over QC
         qc_threshold = 0.5  # Minimum QC score for acceptance
-        accepted = obj.status == 'done' and qc_score >= qc_threshold
+        presence_absent = (presence_label == 'absent')
+        if obj.status in ('processing', 'received'):
+            accepted = None
+        elif presence_absent:
+            accepted = False
+        else:
+            accepted = qc_score is not None and qc_score >= qc_threshold
 
         # Get QC metrics if available (obj.qc might be None but we have qc_score)
         blur_var = 0
@@ -109,23 +112,30 @@ class ObservationSerializer(serializers.ModelSerializer):
             brightness = obj.qc.get('brightness', 0)
 
         reasons = []
-        if qc_score < qc_threshold:
-            # Only add specific reasons if we have obj.qc data
+        # Presence reason first (if absent and not processing)
+        if accepted is False and presence_absent and obj.status == 'done':
+            score_str = f"{(presence_score * 100):.0f}" if presence_score is not None else None
+            reasons.append(
+                f"no hyacinth detected{f' (confidence: {score_str}%)' if score_str is not None else ''}"
+            )
+        # QC reasons if below threshold
+        if qc_score is not None and qc_score < qc_threshold and obj.status == 'done':
+            specifics = []
             if obj.qc:
                 if blur_var < 20:
-                    reasons.append("blurry")
+                    specifics.append("blurry")
                 if brightness < 50:
-                    reasons.append("dark")
+                    specifics.append("dark")
                 if brightness > 200:
-                    reasons.append("overexposed")
-            # Fallback reason if no specific metrics available
-            if not reasons:
+                    specifics.append("overexposed")
+            if specifics:
+                reasons.extend(specifics)
+            else:
                 reasons.append("poor quality")
 
-        # If status is still processing, show processing message
-        if obj.status == 'processing' or obj.status == 'received':
+        # Message formatting
+        if obj.status in ('processing', 'received'):
             reason_text = "processing..."
-            accepted = None  # Not yet determined
         else:
             reason_text = ", ".join(reasons) if reasons else "clear photo"
 

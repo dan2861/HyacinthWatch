@@ -37,6 +37,11 @@ function ObservationThumbnail({ obsId }) {
 }
 
 function ObservationRow({ obs, onClick }) {
+  const toNum = (v) => {
+    if (v === null || v === undefined) return null;
+    const n = typeof v === 'number' ? v : parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  };
   const qcScore = obs.qc_score ?? obs.qc?.score ?? null;
   const presenceScore = obs.pred?.presence?.score ?? null;
   const coverPct = obs.pred?.seg?.cover_pct ?? null;
@@ -100,9 +105,13 @@ function ObservationRow({ obs, onClick }) {
         {coverPct !== null ? coverPct.toFixed(1) + '%' : '-'}
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-        {obs.lat !== null && obs.lon !== null ? (
-          <span>{obs.lat.toFixed(5)}, {obs.lon.toFixed(5)}</span>
-        ) : '-'}
+        {(() => {
+          const lat = toNum(obs.lat);
+          const lon = toNum(obs.lon);
+          return lat !== null && lon !== null ? (
+            <span>{lat.toFixed(5)}, {lon.toFixed(5)}</span>
+          ) : '-';
+        })()}
       </td>
     </tr>
   );

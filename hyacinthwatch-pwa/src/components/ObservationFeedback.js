@@ -249,7 +249,7 @@ export default function ObservationFeedback({ obsId, sbUser, onPointsUpdate }) {
                         </div>
                     )}
 
-                    {/* QC Feedback - Show even if accepted is null (processing) */}
+                    {/* QC Feedback details (avoid repeating the rejection message already shown in header) */}
                     {qcFeedback && (
                         <div style={{ 
                             marginBottom: 8,
@@ -261,9 +261,6 @@ export default function ObservationFeedback({ obsId, sbUser, onPointsUpdate }) {
                                          qcFeedback.accepted === false ? '#ef4444' : '#6b7280'}`,
                             fontSize: 12
                         }}>
-                            <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                                {qcFeedback.message}
-                            </div>
                             {qcFeedback.score !== undefined && (
                                 <div style={{ color: '#6b7280', fontSize: 11 }}>
                                     Quality score: {qcFeedback.score.toFixed(2)}
@@ -315,7 +312,7 @@ export default function ObservationFeedback({ obsId, sbUser, onPointsUpdate }) {
                                     </div>
                                 )}
                             </div>
-                            {presence && (
+                            {presence && !qcFeedback && (
                                 <div style={{ 
                                     marginTop: 4, 
                                     fontSize: 11, 
@@ -324,7 +321,7 @@ export default function ObservationFeedback({ obsId, sbUser, onPointsUpdate }) {
                                 }}>
                                     {presence.label === 'present' 
                                         ? `✓ Hyacinth detected (${(presence.score * 100).toFixed(0)}% confidence)`
-                                        : `✗ No hyacinth detected (${(presence.score * 100).toFixed(0)}% confidence) - Rejected`
+                                        : `✗ No hyacinth detected (${(presence.score * 100).toFixed(0)}% confidence)`
                                     }
                                 </div>
                             )}
@@ -332,7 +329,7 @@ export default function ObservationFeedback({ obsId, sbUser, onPointsUpdate }) {
                     )}
 
                     {/* Show presence info even when no mask (for rejected/absent observations) */}
-                    {!maskUrl && presence && presence.label === 'absent' && (
+                    {!maskUrl && presence && presence.label === 'absent' && !qcFeedback && (
                         <div style={{ 
                             marginTop: 8,
                             padding: 8,
@@ -342,7 +339,7 @@ export default function ObservationFeedback({ obsId, sbUser, onPointsUpdate }) {
                             fontSize: 12
                         }}>
                             <div style={{ fontWeight: 600, color: '#991b1b', marginBottom: 4 }}>
-                                ✗ Rejected: No hyacinth detected
+                                ✗ No hyacinth detected
                             </div>
                             <div style={{ color: '#7f1d1d', fontSize: 11 }}>
                                 Confidence: {(presence.score * 100).toFixed(0)}% • 

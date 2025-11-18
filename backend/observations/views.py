@@ -295,7 +295,8 @@ class ObservationRefCreate(APIView):
                             qc = compute_qc(tmpname)
                             obs.qc = qc
                             obs.qc_score = qc.get('score')
-                            obs.status = 'done'
+                            # Keep status as 'processing' until presence finishes to avoid premature acceptance
+                            obs.status = 'processing'
                             obs.save(update_fields=[
                                      'qc', 'qc_score', 'status', 'updated_at'])
                             did_qc = True

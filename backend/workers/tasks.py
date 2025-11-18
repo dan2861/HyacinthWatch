@@ -138,14 +138,16 @@ def classify_presence(obs_id: str):
             except Observation.DoesNotExist:
                 obs_for_award = obs
             # Only award points if score is actually above threshold (not just label='present')
-            # This helps catch cases where label might be incorrectly set
-            if score >= thr:
+            # Additionally, if QC score exists and is below threshold, do not award.
+            qc_score = getattr(obs_for_award, 'qc_score', None)
+            qc_block = (qc_score is not None and qc_score < 0.5)
+            if score >= thr and not qc_block:
                 logger.info('Awarding presence points: obs_id=%s, label=%s, score=%.3f, threshold=%.3f',
                             obs_id, label, score, thr)
                 award_for_presence(obs_for_award, label)
             else:
-                logger.info('Skipping presence points (below threshold): obs_id=%s, label=%s, score=%.3f, threshold=%.3f',
-                            obs_id, label, score, thr)
+                logger.info('Skipping presence points (failed threshold or QC): obs_id=%s, label=%s, score=%.3f, thr=%.3f, qc_score=%s',
+                            obs_id, label, score, thr, qc_score)
         except Exception:
             logger.exception(
                 'classify_presence: failed to award presence points for %s', obs_id)
@@ -398,17 +400,17 @@ def segment_and_cover(obs_id: str):
                 obs_for_award = obs
 
             # Only award segmentation points for images that contain hyacinth
-            # Require both label='present' AND score above threshold (default 0.5)
-            # to avoid false positives from the classifier
-            # Also require presence_score to not be None (presence must be classified)
-            if presence_label == 'present' and presence_score is not None and presence_score >= 0.5:
+            # Require presence above threshold and acceptable QC if available.
+            qc_score = getattr(obs_for_award, 'qc_score', None)
+            qc_block = (qc_score is not None and qc_score < 0.5)
+            if (presence_label == 'present' and presence_score is not None and presence_score >= 0.5 and not qc_block):
                 logger.info('Awarding segmentation points for present image: obs_id=%s, presence_label=%s, presence_score=%.3f, cover_pct=%.1f%%',
                             obs_id, presence_label, presence_score, seg_entry.get('cover_pct'))
                 # award based on the seg entry we just stored
                 award_for_segmentation(obs_for_award, seg_entry)
             else:
-                logger.warning('Skipping segmentation points (not hyacinth or insufficient score): obs_id=%s, presence_label=%s, presence_score=%s, cover_pct=%.1f%%',
-                               obs_id, presence_label, presence_score, seg_entry.get('cover_pct'))
+                logger.warning('Skipping segmentation points (failed presence/QC): obs_id=%s, presence_label=%s, presence_score=%s, qc_score=%s, cover_pct=%.1f%%',
+                               obs_id, presence_label, presence_score, qc_score, seg_entry.get('cover_pct'))
         except Exception:
             logger.exception(
                 'segment_and_cover: failed to award segmentation points for %s', obs_id)
