@@ -279,10 +279,6 @@ See [infra/README.md](./infra/README.md) for deployment details.
 4. Update documentation as needed
 5. Test thoroughly before submitting PR
 
-## License
-
-[Add your license here]
-
 ## Acknowledgments
 
 - Built for citizen science and ecological monitoring
