@@ -34,6 +34,9 @@ HyacinthWatch enables citizens and researchers to:
 
 ## Architecture
 
+![HyacinthWatch Architecture](./docs/architecture-diagram.png)
+
+<!-- Alternative ASCII diagram (kept as fallback or remove if using image above)
 ```
 ┌─────────────────┐
 │   PWA (React)   │  ← Field data collection (offline-capable)
@@ -65,6 +68,7 @@ HyacinthWatch enables citizens and researchers to:
 │   Storage       │     Authentication
 └─────────────────┘
 ```
+-->
 
 ### Data Flow
 
