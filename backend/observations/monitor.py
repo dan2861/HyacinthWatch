@@ -72,44 +72,38 @@ def retry_orphaned_presence():
             logger.exception(
                 'retry_orphaned_presence: failed to save retry counter for %s', obs.id)
 
-            # compute a countdown using exponential backoff (capped). This avoids
-            # immediate reprocessing storms and spaces out retries per-observation.
-            try:
-                # backoff: min(60 * 2**retries, 3600) seconds
-                countdown = min(60 * (2 ** retries), 3600)
-            except Exception:
-                countdown = 60
+        try:
+            countdown = min(60 * (2 ** retries), 3600)
+        except Exception:
+            countdown = 60
 
-            # send the classify_presence task by name via Celery app (avoids importing tasks)
-            if celery_app is not None:
+        if celery_app is not None:
+            try:
+                celery_app.send_task(
+                    'observations.tasks.classify_presence', args=(str(obs.id),), countdown=countdown)
+                enqueued += 1
+                logger.info(
+                    'retry_orphaned_presence: sent classify_presence for %s (attempt %d) countdown=%s',
+                    obs.id, retries + 1, countdown)
+            except Exception:
+                logger.exception(
+                    'retry_orphaned_presence: failed to send classify_presence for %s', obs.id)
+        else:
+            try:
+                from .tasks import classify_presence
                 try:
-                    celery_app.send_task(
-                        'observations.tasks.classify_presence', args=(str(obs.id),), countdown=countdown)
+                    classify_presence.apply_async(
+                        args=(str(obs.id),), countdown=countdown)
                     enqueued += 1
                     logger.info(
-                        'retry_orphaned_presence: sent classify_presence for %s (attempt %d) countdown=%s',
-                        obs.id, retries + 1, countdown)
+                        'retry_orphaned_presence: enqueued classify_presence (fallback) for %s countdown=%s', obs.id, countdown)
                 except Exception:
-                    logger.exception(
-                        'retry_orphaned_presence: failed to send classify_presence for %s', obs.id)
-            else:
-                # attempt local import as a fallback
-                try:
-                    from .tasks import classify_presence
-                    try:
-                        classify_presence.apply_async(
-                            args=(str(obs.id),), countdown=countdown)
-                        enqueued += 1
-                        logger.info(
-                            'retry_orphaned_presence: enqueued classify_presence (fallback) for %s countdown=%s', obs.id, countdown)
-                    except Exception:
-                        # synchronous fallback (no countdown)
-                        classify_presence(str(obs.id))
-                        enqueued += 1
-                        logger.info(
-                            'retry_orphaned_presence: ran classify_presence sync (fallback) for %s', obs.id)
-                except Exception:
-                    logger.exception(
-                        'retry_orphaned_presence: no way to invoke classify_presence for %s', obs.id)
+                    classify_presence(str(obs.id))
+                    enqueued += 1
+                    logger.info(
+                        'retry_orphaned_presence: ran classify_presence sync (fallback) for %s', obs.id)
+            except Exception:
+                logger.exception(
+                    'retry_orphaned_presence: no way to invoke classify_presence for %s', obs.id)
 
     return {'candidates': count, 'enqueued': enqueued}

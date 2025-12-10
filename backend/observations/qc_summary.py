@@ -8,12 +8,19 @@ import json
 import requests
 import jwt
 
-# Simple thread-safe in-memory cache for small dev usage. Production should use Redis.
 _CACHE = {}
 _CACHE_LOCK = threading.Lock()
 
 
 def cached_json(key: str, ttl_seconds: int = 600):
+    """Decorator for caching JSON-serializable function results in memory.
+    
+    Thread-safe in-memory cache. For production, consider using Redis.
+    
+    Args:
+        key: Cache key string
+        ttl_seconds: Time-to-live in seconds (default: 600)
+    """
     def decorator(fn):
         @wraps(fn)
         def wrapped(*args, **kwargs):
@@ -36,30 +43,40 @@ class Params:
 
 
 def parse_params(request):
+    """Parse and validate query parameters for QC summary endpoint.
+    
+    Supports ISO8601 datetime parsing with multiple format fallbacks,
+    timezone handling, and various filter parameters.
+    
+    Args:
+        request: Django request object with query_params
+        
+    Returns:
+        Params object with parsed and validated values
+        
+    Raises:
+        ValidationError: If parameters are invalid
+    """
     q = request.query_params
-    # support missing start/end by using a reasonable default window (last 7 days)
 
     def try_parse_iso(s):
+        """Try to parse ISO8601 datetime string with multiple format fallbacks."""
         if not s:
             return None
-        # try the common ISO path first
         try:
             return datetime.fromisoformat(s.replace('Z', '+00:00'))
         except Exception:
             pass
-        # try some common formats (with/without micros, with Z)
         fmts = ['%Y-%m-%dT%H:%M:%S.%fZ', '%Y-%m-%dT%H:%M:%SZ',
                 '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d']
         for fmt in fmts:
             try:
                 parsed = datetime.strptime(s, fmt)
-                # if it's a date-only, make it aware at midnight UTC
                 if parsed.tzinfo is None:
                     parsed = parsed.replace(tzinfo=timezone.utc)
                 return parsed
             except Exception:
                 continue
-        # try numeric epoch seconds
         try:
             if s.isdigit():
                 return datetime.fromtimestamp(int(s), tz=timezone.utc)
@@ -73,7 +90,6 @@ def parse_params(request):
     end = try_parse_iso(end_s)
 
     if start is None or end is None:
-        # If either is missing, default to last 7 days ending now (UTC)
         now = datetime.now(timezone.utc)
         if end is None:
             end = now
@@ -100,8 +116,6 @@ def parse_params(request):
     if platform and platform.lower() not in ('android', 'ios', 'web'):
         raise ValidationError('platform must be one of android, ios, web')
 
-    # Don't default to 'hyacinth' - only filter if explicitly provided
-    # This allows showing all observations by default
     species = q.get('species')
     granularity = (q.get('granularity', 'auto') or 'auto').lower()
     if granularity not in ('auto', 'day', 'hour'):
@@ -124,6 +138,14 @@ def parse_params(request):
 
 
 def bin_blur(values):
+    """Bin blur variance values into histogram buckets.
+    
+    Args:
+        values: List of blur variance values (0-50 range)
+        
+    Returns:
+        List of [label, count] pairs for histogram
+    """
     bins = [(0, 10), (10, 20), (20, 30), (30, 40), (40, 50)]
     counts = [0]*len(bins)
     for v in values:
@@ -137,6 +159,14 @@ def bin_blur(values):
 
 
 def bin_brightness(values):
+    """Bin brightness values (0-1 normalized) into histogram buckets.
+    
+    Args:
+        values: List of brightness values (0-1 range)
+        
+    Returns:
+        List of [label, count] pairs for histogram
+    """
     labels = ["very_dark", "dark", "ok", "bright", "blown"]
     counts = [0]*5
     for v in values:
@@ -157,6 +187,14 @@ def bin_brightness(values):
 
 
 def ema_series(buckets, key, out_key, alpha=0.3):
+    """Compute exponential moving average for a series of buckets.
+    
+    Args:
+        buckets: List of dicts containing time series data
+        key: Key to read values from in each bucket
+        out_key: Key to write EMA values to in each bucket
+        alpha: Smoothing factor (0-1), higher = more responsive to recent values
+    """
     ema = None
     for b in buckets:
         x = b.get(key, 0.0) or 0.0
@@ -168,8 +206,23 @@ _JWK_CACHE = {'jwks': None, 'expires_at': 0}
 
 
 def verify_supabase_jwt(token, supabase_url, allowed_roles=('researcher', 'moderator', 'admin')):
-    # token: raw bearer token. We will fetch JWKs from <supabase_url>/.well-known/jwks.json (approx).
-    # Accepts tokens with 'sub' as user id and optional user_metadata.role
+    """Verify a Supabase JWT token by fetching JWKs and validating signature.
+    
+    Fetches JSON Web Key Set from Supabase's well-known endpoint and uses
+    it to verify the token signature. Also checks role if present in
+    user_metadata.
+    
+    Args:
+        token: Raw JWT bearer token string
+        supabase_url: Supabase project URL for JWKS endpoint
+        allowed_roles: Tuple of allowed role values (default: researcher, moderator, admin)
+        
+    Returns:
+        Decoded JWT payload dict
+        
+    Raises:
+        PermissionDenied: If token is invalid, signature verification fails, or role is insufficient
+    """
     now = time.time()
     if _JWK_CACHE['jwks'] is None or _JWK_CACHE['expires_at'] < now:
         try:
@@ -182,8 +235,6 @@ def verify_supabase_jwt(token, supabase_url, allowed_roles=('researcher', 'moder
             _JWK_CACHE['jwks'] = None
     jwks = _JWK_CACHE['jwks']
     if not jwks:
-        # Provide more detailed error about JWKS fetch failure
-        # Include a marker that dev fallback can detect
         raise PermissionDenied('JWKS_FETCH_FAILED: Unable to verify token (jwks fetch failed). '
                               'This usually means the backend cannot reach Supabase to fetch public keys. '
                               'Check network connectivity and SUPABASE_URL configuration.')
@@ -209,13 +260,10 @@ def verify_supabase_jwt(token, supabase_url, allowed_roles=('researcher', 'moder
     except Exception as e:
         raise PermissionDenied('Token verification failed: %s' % (e,))
 
-    # check role claim if present
-    # Allow access if no role is specified, only enforce role if one is present
     role = None
     user_meta = payload.get('user_metadata') or {}
     if isinstance(user_meta, dict):
         role = user_meta.get('role')
-    # Only check role if it's explicitly set; if no role, allow access
     if role and role not in allowed_roles:
         raise PermissionDenied(f'Insufficient role: {role}. Required: {", ".join(allowed_roles)}')
 

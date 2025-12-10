@@ -58,8 +58,6 @@ export async function ensureSupabaseSession(options = {}) {
   return session || null
 }
 
-// Return a usable access token string (if any) from the current session.
-// Return a usable access token string (if any) from the current session.
 export async function getAccessToken(options) {
   const session = await ensureSupabaseSession(options)
   return (

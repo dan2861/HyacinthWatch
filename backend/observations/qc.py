@@ -3,15 +3,23 @@ import numpy as np
 
 
 def _laplacian_var(gray: np.ndarray) -> float:
-    # gray: 2D uint8 array
+    """Compute Laplacian variance to measure image sharpness.
+    
+    Higher variance indicates sharper image. Uses manual convolution
+    with a Laplacian kernel to avoid scipy dependency.
+    
+    Args:
+        gray: 2D uint8 grayscale image array
+        
+    Returns:
+        Variance of Laplacian response (higher = sharper)
+    """
     k = np.array([[0,  1, 0],
                   [1, -4, 1],
                   [0,  1, 0]], dtype=np.int32)
-    # manual conv (valid) without scipy
     H, W = gray.shape
     if H < 3 or W < 3:
         return 0.0
-    # pad 1px
     pad = np.pad(gray.astype(np.int32), 1)
     out = (
         k[0, 0]*pad[0:H,   0:W] + k[0, 1]*pad[0:H,   1:W+1] + k[0, 2]*pad[0:H,   2:W+2] +
@@ -23,13 +31,23 @@ def _laplacian_var(gray: np.ndarray) -> float:
 
 
 def compute_qc(image_path: str) -> dict:
+    """Compute quality control metrics for an image.
+    
+    Calculates brightness and blur metrics, then combines them into
+    a single quality score. Blur is measured using Laplacian variance
+    (higher = sharper). Brightness is the mean pixel value.
+    
+    Args:
+        image_path: Path to image file
+        
+    Returns:
+        Dict with 'brightness' (0-255), 'blur_var' (higher=sharper), and 'score' (0-1)
+    """
     with Image.open(image_path) as im:
-        im = im.convert('L')  # grayscale
+        im = im.convert('L')
         arr = np.array(im, dtype=np.uint8)
-    brightness = float(arr.mean())                 # 0..255
-    blur_var = _laplacian_var(arr)                 # higher = sharper
-    # Optional normalization to a 0..1 score (tune thresholds later)
-    # Treat blur_var>=200 as sharp, <=20 as very blurry; brightness ~[50, 200] ok
+    brightness = float(arr.mean())
+    blur_var = _laplacian_var(arr)
     blur_score = max(0.0, min(1.0, (blur_var - 20.0) / (200.0 - 20.0)))
     bright_score = max(0.0, min(1.0, (brightness - 50.0) / (200.0 - 50.0)))
     qc_score = round(0.6 * blur_score + 0.4 * bright_score, 3)

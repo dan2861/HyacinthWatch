@@ -43,16 +43,13 @@ def score_from_qc(qc: dict) -> int:
     if not qc:
         return 0
     try:
-        # prefer a qc_score field 0..1
         s = qc.get('qc_score') or qc.get('score') or qc.get('qc_score_raw')
         if s is None:
-            # fallback to brightness/blur combination if present
             brightness = float(qc.get('brightness') or 0)
             blur = float(qc.get('blur_var') or 0)
-            # map to 0..1 roughly
             s = min(1.0, max(0.0, (brightness / 255.0) * (1.0 / (1.0 + blur))))
         s = float(s)
-        return int(s * 20)  # up to 20 points
+        return int(s * 20)
     except Exception:
         return 0
 
@@ -66,13 +63,9 @@ def score_from_seg(seg: dict) -> int:
         return 0
     try:
         cover = float(seg.get('cover_pct') or 0.0)
-        # Only award points if there's actually some cover detected (> 0%)
-        # This helps filter out false positives from the segmentation model
         if cover <= 0.0:
             return 0
-        # give 1 point per 10% cover, up to 10 points
         pts = int(min(10, cover // 10))
-        # bonus if mask comes from a non-fallback model
         mv = seg.get('model_v') or ''
         if mv and 'fallback' not in mv:
             pts += 2
@@ -86,8 +79,6 @@ def award_for_presence(obs, label: str):
     user = getattr(obs, 'user', None)
     if not user:
         return 0
-    # Only award points for images that contain hyacinth (present)
-    # Absent images should get 0 points
     points = 5 if label == 'present' else 0
     return award_points(user, points, reason=f'presence:{label}')
 

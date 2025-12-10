@@ -61,30 +61,20 @@ class ObservationSerializer(serializers.ModelSerializer):
                     seg_points = score_from_seg(seg)
                     points += seg_points
 
-            # QC points (optional, if gamification awards QC points)
-            # Note: Currently QC points may not be awarded, but calculate them for display
-            # if obj.qc:
-            #     qc_points = score_from_qc(obj.qc)
-            #     points += qc_points
-
             return points if points > 0 else None
         except Exception:
             return None
 
     def get_qc_feedback(self, obj):
         """Generate QC feedback message (accepted/rejected with reason)."""
-        # Presence classification (no early return so we can aggregate reasons)
         presence = (obj.pred or {}).get('presence', {})
         presence_label = presence.get('label')
         presence_score = presence.get('score')
 
-        # Try to get qc_score - check both obj.qc_score and obj.qc dict
         qc_score = obj.qc_score
         if qc_score is None and obj.qc:
             qc_score = obj.qc.get('score')
 
-        # If no qc_score at all, we can't generate feedback
-        # But log for debugging
         if qc_score is None:
             import logging
             logger = logging.getLogger(__name__)
@@ -94,8 +84,7 @@ class ObservationSerializer(serializers.ModelSerializer):
                     obj.id, bool(obj.qc), obj.qc_score)
             return None
 
-        # Determine acceptance with presence taking precedence over QC
-        qc_threshold = 0.5  # Minimum QC score for acceptance
+        qc_threshold = 0.5
         presence_absent = (presence_label == 'absent')
         if obj.status in ('processing', 'received'):
             accepted = None
@@ -104,7 +93,6 @@ class ObservationSerializer(serializers.ModelSerializer):
         else:
             accepted = qc_score is not None and qc_score >= qc_threshold
 
-        # Get QC metrics if available (obj.qc might be None but we have qc_score)
         blur_var = 0
         brightness = 0
         if obj.qc:
@@ -112,13 +100,11 @@ class ObservationSerializer(serializers.ModelSerializer):
             brightness = obj.qc.get('brightness', 0)
 
         reasons = []
-        # Presence reason first (if absent and not processing)
         if accepted is False and presence_absent and obj.status == 'done':
             score_str = f"{(presence_score * 100):.0f}" if presence_score is not None else None
             reasons.append(
                 f"no hyacinth detected{f' (confidence: {score_str}%)' if score_str is not None else ''}"
             )
-        # QC reasons if below threshold
         if qc_score is not None and qc_score < qc_threshold and obj.status == 'done':
             specifics = []
             if obj.qc:
@@ -133,7 +119,6 @@ class ObservationSerializer(serializers.ModelSerializer):
             else:
                 reasons.append("poor quality")
 
-        # Message formatting
         if obj.status in ('processing', 'received'):
             reason_text = "processing..."
         else:
@@ -179,7 +164,6 @@ class ObservationSerializer(serializers.ModelSerializer):
                                  obj.id, list(seg.keys()) if seg else None)
                 return None
 
-            # If it's a supabase:// URL, convert to signed URL
             if mask_url_path.startswith('supabase://'):
                 try:
                     from utils.storage import signed_url as storage_signed_url
@@ -195,14 +179,11 @@ class ObservationSerializer(serializers.ModelSerializer):
                     import logging
                     logging.getLogger(__name__).warning(
                         'Failed to create signed URL for mask: %s', e)
-                    # If signed URL creation fails, return None (can't use supabase:// directly)
                     return None
 
-            # If it's already a full URL, return it
             if mask_url_path.startswith('http://') or mask_url_path.startswith('https://'):
                 return mask_url_path
 
-            # Otherwise return None (don't return incomplete paths)
             return None
         except Exception as e:
             import logging
