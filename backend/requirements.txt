@@ -1,24 +1,38 @@
+# Django Framework
 Django==4.2
-djangorestframework
-django-cors-headers
-psycopg2-binary
-python-dotenv
-Pillow
-boto3
-supabase
-django-storages==1.14.6
-PyJWT>=2.8.0
-requests>=2.31.0
-dj-database-url>=1.2.0
-numpy>=1.26.0
-celery>=5.3.0
+djangorestframework==3.16.1
+django-cors-headers==4.9.0
 
-# WSGI HTTP server for running Django in production
+# Database
+psycopg2-binary==2.9.11
+dj-database-url==3.0.1
+
+# Environment & Configuration
+python-dotenv==1.1.1
+
+# Image Processing
+Pillow==12.0.0
+
+# Storage (Supabase & S3)
+supabase==2.22.0
+boto3==1.40.55
+django-storages==1.14.6
+
+# Authentication & Security
+PyJWT==2.10.1
+
+# HTTP & Networking
+requests==2.32.5
+
+# Task Queue (Celery)
+celery==5.5.3
+redis==5.2.1
+
+# Numeric Computing
+numpy==2.3.4
+
+# WSGI HTTP Server (Production)
 gunicorn==21.2.0
- 
-# Redis client for Celery/Kombu
-redis>=4.6.0
-cairosvg==2.0.0
 
 # Machine learning/runtime dependencies are installed in the worker image only.
 # See `backend/requirements_worker.txt` for the ML packages (torch, torchvision,

@@ -255,7 +255,7 @@ See [infra/README.md](./infra/README.md) for deployment details.
 ## Documentation
 
 - [WORKFLOW.md](./WORKFLOW.md) - Detailed photo upload and processing workflow
-- [CODE_REVIEW.md](./CODE_REVIEW.md) - Known issues and TODOs
+- [TODO.md](./TODO.md) - Known issues and TODOs
 - [backend/README.md](./backend/README.md) - Backend API documentation
 - [hyacinthwatch-pwa/README.md](./hyacinthwatch-pwa/README.md) - PWA documentation
 - [researcher-portal/README.md](./researcher-portal/README.md) - Researcher portal documentation
@@ -273,7 +273,7 @@ See [infra/README.md](./infra/README.md) for deployment details.
 
 ### Development Workflow
 
-1. Check [CODE_REVIEW.md](./CODE_REVIEW.md) for known issues
+1. Check [TODO.md](./TODO.md) for known issues
 2. Review existing code patterns
 3. Write clear commit messages
 4. Update documentation as needed
@@ -290,7 +290,7 @@ See [infra/README.md](./infra/README.md) for deployment details.
 For issues and questions:
 - Open an issue on GitHub
 - Check existing documentation
-- Review [CODE_REVIEW.md](./CODE_REVIEW.md) for known issues
+- Review [TODO.md](./TODO.md) for known issues
 
 ---
 
